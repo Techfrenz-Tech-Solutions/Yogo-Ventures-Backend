@@ -4,6 +4,10 @@ node_modules/
 # Environment variables
 .env
 
+# Uploaded images (local disk storage / cloud-mounted folder)
+storage/*
+!storage/.gitkeep
+
 # Logs
 logs/
 *.log

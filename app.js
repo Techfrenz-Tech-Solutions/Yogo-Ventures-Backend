@@ -51,6 +51,7 @@ app.use(bodyParser.json());
 
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/storage', express.static(path.join(__dirname, 'storage')));
 app.use(logger('dev'));
 
 const { log: showLog } = console;

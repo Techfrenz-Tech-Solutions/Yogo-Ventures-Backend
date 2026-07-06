@@ -1,42 +1,13 @@
-// const express = require('express');
-// const router = express.Router();
-
-// const itemController = require('../controllers/itemMasterController.js');
-
-
-// const uploadMiddleware = (req, res, next) => {
-//     upload.single('image')(req, res, function (err) {
-
-//         if (err instanceof multer.MulterError) {
-//             if (err.code === 'LIMIT_FILE_SIZE') {
-//                 return res.json({
-//                     status: 0,
-//                     message: 'File size must be less than 5MB'
-//                 });
-//             }
-//         } else if (err) {
-//             return res.json({
-//                 status: 0,
-//                 message: err.message
-//             });
-//         }
-
-//         next();
-//     });
-// };
-
-// // Route
-// router.post('/uploadToPinata', uploadMiddleware, itemController.uploadToPinata);
-
 const express = require('express');
 const router = express.Router();
-  
+const multer = require('multer');
+
 const itemController = require('../controllers/itemMasterController.js');
- 
-// Middleware
-const uploadMiddleware = (req, res, next) => {
-    upload.single('image')(req, res, function (err) {
- 
+const upload = require('../helper/upload.js');
+
+// Wraps a multer middleware so file-size/type errors come back as normal JSON responses
+const uploadMiddleware = (multerMiddleware) => (req, res, next) => {
+    multerMiddleware(req, res, function (err) {
         if (err instanceof multer.MulterError) {
             if (err.code === 'LIMIT_FILE_SIZE') {
                 return res.json({
@@ -44,19 +15,17 @@ const uploadMiddleware = (req, res, next) => {
                     message: 'File size must be less than 5MB'
                 });
             }
+            return res.json({ status: 0, message: err.message });
         } else if (err) {
             return res.json({
                 status: 0,
                 message: err.message
             });
         }
- 
+
         next();
     });
 };
- 
-// // Route
-// router.post('/uploadToPinata', uploadMiddleware, itemController.uploadToPinata);
 
 router.post('/countrycreate', itemController.createCountry);
 router.get('/countrylist', itemController.getCountries);
@@ -86,10 +55,19 @@ router.get('/sub-categorydropdown', itemController.subCategoryDropdown);
 
 
 
-router.post('/productcreate', itemController.createProduct);
+const productImageFields = upload.fields([
+    { name: 'index_image', maxCount: 1 },
+    { name: 'image1', maxCount: 1 },
+    { name: 'image2', maxCount: 1 },
+    { name: 'image3', maxCount: 1 },
+    { name: 'image4', maxCount: 1 },
+    { name: 'image5', maxCount: 1 }
+]);
+
+router.post('/productcreate', uploadMiddleware(productImageFields), itemController.createProduct);
 router.get('/productlist', itemController.getProducts);
 router.get('/product/:id', itemController.getProduct);
-router.post('/productupdate', itemController.updateProduct);
+router.post('/productupdate', uploadMiddleware(productImageFields), itemController.updateProduct);
 router.post('/productdelete', itemController.deleteProduct);
 //router.get('/productdropdown', itemController.productDropdown);
 
@@ -110,17 +88,17 @@ router.post('/contact-usdelete', itemController.deleteContactUs);
 
 
 
-router.post('/best-sellingcreate', itemController.createBestSelling);
+router.post('/best-sellingcreate', uploadMiddleware(upload.single('image')), itemController.createBestSelling);
 router.get('/best-sellinglist', itemController.getBestSellingList);
 router.get('/best-selling/:id', itemController.getBestSelling);
-router.post('/best-sellingupdate', itemController.updateBestSelling);
+router.post('/best-sellingupdate', uploadMiddleware(upload.single('image')), itemController.updateBestSelling);
 router.post('/best-sellingdelete', itemController.deleteBestSelling);
 
 
-router.post('/new-arrivalcreate', itemController.createNewArrival);
+router.post('/new-arrivalcreate', uploadMiddleware(upload.single('image')), itemController.createNewArrival);
 router.get('/new-arrivallist', itemController.getNewArrivalList);
 router.get('/new-arrival/:id', itemController.getNewArrival);
-router.post('/new-arrivalupdate', itemController.updateNewArrival);
+router.post('/new-arrivalupdate', uploadMiddleware(upload.single('image')), itemController.updateNewArrival);
 router.post('/new-arrivaldelete', itemController.deleteNewArrival);
 
 

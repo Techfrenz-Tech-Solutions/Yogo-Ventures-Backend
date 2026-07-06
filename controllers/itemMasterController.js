@@ -644,6 +644,8 @@ exports.createProduct = (req, res) => {
             });
         }
 
+        const files = req.files || {};
+
         const query = `
             INSERT INTO product_master
             (
@@ -670,12 +672,12 @@ exports.createProduct = (req, res) => {
                 reqData.category_name,
                 reqData.sub_category_name,
                 reqData.product_description,
-                reqData.index_image || '',
-                reqData.image1 || '',
-                reqData.image2 || '',
-                reqData.image3 || '',
-                reqData.image4 || '',
-                reqData.image5 || ''
+                files.index_image?.[0]?.filename || '',
+                files.image1?.[0]?.filename || '',
+                files.image2?.[0]?.filename || '',
+                files.image3?.[0]?.filename || '',
+                files.image4?.[0]?.filename || '',
+                files.image5?.[0]?.filename || ''
             ],
             (err, result) => {
 
@@ -780,6 +782,8 @@ exports.updateProduct = (req, res) => {
             });
         }
 
+        const files = req.files || {};
+
         const query = `
             UPDATE product_master
             SET
@@ -805,12 +809,12 @@ exports.updateProduct = (req, res) => {
                 reqData.category_name,
                 reqData.sub_category_name,
                 reqData.product_description,
-                reqData.index_image || '',
-                reqData.image1 || '',
-                reqData.image2 || '',
-                reqData.image3 || '',
-                reqData.image4 || '',
-                reqData.image5 || '',
+                files.index_image?.[0]?.filename || reqData.old_index_image || '',
+                files.image1?.[0]?.filename || reqData.old_image1 || '',
+                files.image2?.[0]?.filename || reqData.old_image2 || '',
+                files.image3?.[0]?.filename || reqData.old_image3 || '',
+                files.image4?.[0]?.filename || reqData.old_image4 || '',
+                files.image5?.[0]?.filename || reqData.old_image5 || '',
                 reqData.id
             ],
             (err, result) => {
