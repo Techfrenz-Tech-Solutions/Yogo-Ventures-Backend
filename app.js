@@ -39,7 +39,7 @@ app.set('view engine', 'pug');
 
 // ================== CORS ==================
 app.use(cors({
-  origin: ["http://localhost:5174","http://localhost:5174"],
+  origin: ["http://localhost:5173","http://localhost:5174"],
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization','cache-control','pragma']
 }));
@@ -95,6 +95,6 @@ app.use(function (err, req, res, next) {
 // ================== SERVER ==================
 let server = http.createServer(app);
 
-server.listen(PORT, () => showLog(`Server running on http://192.168.0.29:${PORT}`));
+server.listen(PORT, () => showLog(`Server running on http://192.168.0.20:${PORT}`));
 
 module.exports = app;
