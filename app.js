@@ -13,6 +13,7 @@ require('dotenv').config({ debug: false, silent: true, quiet: true });
 // ================== ROUTES ==================
 
 var authRouter = require('./routes/authRoutes');
+var uploadRouter = require('./routes/uploadRoutes');
 
 var countryRouter = require('./routes/itemRoutes');
 var categoryRouter = require('./routes/itemRoutes');
@@ -59,6 +60,7 @@ const { log: showLog } = console;
 // ================== ROUTES ==================
 
 app.use('/auth', authRouter);
+app.use('/upload', uploadRouter);
 app.use('/country', countryRouter);
 app.use('/category', categoryRouter);
 app.use('/subcategory', subcategoryRouter);
