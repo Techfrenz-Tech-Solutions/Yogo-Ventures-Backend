@@ -1,4 +1,4 @@
-# Authentication API Documentation
+# Authentication API - Login Only
 
 ## Base URL
 ```
@@ -7,62 +7,7 @@ http://localhost:8001/auth
 
 ---
 
-## 1. User Signup
-
-**Endpoint:** `POST /auth/signup`
-
-**Description:** Register a new user account
-
-### Request Body:
-```json
-{
-  "full_name": "John Doe",
-  "email_id": "john@example.com",
-  "password": "SecurePass123",
-  "phone_number": "9876543210"
-}
-```
-
-### Field Validations:
-- `full_name` - Required, max 255 characters
-- `email_id` - Required, valid email format, max 255 characters, must be unique
-- `password` - Required, minimum 6 characters
-- `phone_number` - Optional, max 20 characters
-
-### Success Response:
-```json
-{
-  "status": 1,
-  "message": "Account created successfully",
-  "user_id": 1
-}
-```
-
-### Error Responses:
-```json
-{
-  "status": 0,
-  "message": "Email already exists"
-}
-```
-
-```json
-{
-  "status": 0,
-  "message": "The full_name field is required"
-}
-```
-
-### cURL Example:
-```bash
-curl -X POST http://localhost:8001/auth/signup \
-  -H "Content-Type: application/json" \
-  -d "{\"full_name\":\"John Doe\",\"email_id\":\"john@example.com\",\"password\":\"SecurePass123\",\"phone_number\":\"9876543210\"}"
-```
-
----
-
-## 2. User Login
+## Login Endpoint
 
 **Endpoint:** `POST /auth/login`
 
@@ -96,6 +41,8 @@ curl -X POST http://localhost:8001/auth/signup \
 ```
 
 ### Error Responses:
+
+**Invalid credentials:**
 ```json
 {
   "status": 0,
@@ -103,6 +50,7 @@ curl -X POST http://localhost:8001/auth/signup \
 }
 ```
 
+**Missing fields:**
 ```json
 {
   "status": 0,
@@ -110,95 +58,26 @@ curl -X POST http://localhost:8001/auth/signup \
 }
 ```
 
-### cURL Example:
+**Database error:**
+```json
+{
+  "status": 0,
+  "message": "Database error"
+}
+```
+
+---
+
+## Testing
+
+### cURL Command:
 ```bash
 curl -X POST http://localhost:8001/auth/login \
   -H "Content-Type: application/json" \
   -d "{\"email_id\":\"john@example.com\",\"password\":\"SecurePass123\"}"
 ```
 
----
-
-## Quick Test Flow
-
-### 1. Create the Database Table
-Run this SQL in your MySQL database:
-
-```sql
-CREATE TABLE users (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    full_name VARCHAR(255) NOT NULL,
-    email_id VARCHAR(255) NOT NULL UNIQUE,
-    phone_number VARCHAR(20) DEFAULT NULL,
-    password VARCHAR(255) NOT NULL,
-    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
-```
-
-### 2. Start the Server
-```bash
-npm start
-```
-
-### 3. Test Signup
-```bash
-curl -X POST http://localhost:8001/auth/signup \
-  -H "Content-Type: application/json" \
-  -d "{\"full_name\":\"Test User\",\"email_id\":\"test@example.com\",\"password\":\"Test@123\",\"phone_number\":\"9876543210\"}"
-```
-
-**Expected Response:**
-```json
-{
-  "status": 1,
-  "message": "Account created successfully",
-  "user_id": 1
-}
-```
-
-### 4. Test Login
-```bash
-curl -X POST http://localhost:8001/auth/login \
-  -H "Content-Type: application/json" \
-  -d "{\"email_id\":\"test@example.com\",\"password\":\"Test@123\"}"
-```
-
-**Expected Response:**
-```json
-{
-  "status": 1,
-  "message": "Login successful",
-  "token": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "user": {
-    "id": 1,
-    "full_name": "Test User",
-    "email_id": "test@example.com",
-    "phone_number": "9876543210"
-  }
-}
-```
-
----
-
-## Testing with Postman
-
-### Signup Request
-- **Method:** POST
-- **URL:** `http://localhost:8001/auth/signup`
-- **Headers:** 
-  - `Content-Type: application/json`
-- **Body (raw JSON):**
-```json
-{
-  "full_name": "Test User",
-  "email_id": "test@example.com",
-  "password": "Test@123",
-  "phone_number": "9876543210"
-}
-```
-
-### Login Request
+### Postman Setup:
 - **Method:** POST
 - **URL:** `http://localhost:8001/auth/login`
 - **Headers:** 
@@ -206,10 +85,102 @@ curl -X POST http://localhost:8001/auth/login \
 - **Body (raw JSON):**
 ```json
 {
-  "email_id": "test@example.com",
-  "password": "Test@123"
+  "email_id": "john@example.com",
+  "password": "SecurePass123"
 }
 ```
+
+---
+
+## How to Create Test Users
+
+Since signup is not available, you need to manually insert users into the database with hashed passwords.
+
+### Option 1: Use Node.js Script
+
+Create a file `create-user.js`:
+
+```javascript
+const bcrypt = require('bcrypt');
+
+async function hashPassword() {
+    const password = 'YourPassword123';
+    const hash = await bcrypt.hash(password, 10);
+    console.log('Hashed password:', hash);
+}
+
+hashPassword();
+```
+
+Run it:
+```bash
+node create-user.js
+```
+
+Then insert into database:
+```sql
+INSERT INTO users (full_name, email_id, phone_number, password) 
+VALUES ('John Doe', 'john@example.com', '9876543210', 'PASTE_HASHED_PASSWORD_HERE');
+```
+
+### Option 2: Direct SQL Insert (Example)
+
+```sql
+-- Password: Test@123
+INSERT INTO users (full_name, email_id, phone_number, password) 
+VALUES (
+    'Admin User', 
+    'admin@yogoventures.com', 
+    '9876543210',
+    '$2b$10$abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ12'
+);
+```
+
+**Note:** Replace the password hash with an actual bcrypt hash generated using the script above.
+
+---
+
+## Using the JWT Token
+
+After successful login, save the token and use it for protected routes:
+
+```javascript
+// Save token
+localStorage.setItem('token', data.token);
+
+// Use token in API requests
+fetch('http://localhost:8001/api/protected-endpoint', {
+    headers: {
+        'Authorization': localStorage.getItem('token')
+    }
+});
+```
+
+---
+
+## Token Details
+
+- **Algorithm:** HS256 (HMAC with SHA-256)
+- **Expiry:** 7 days
+- **Payload:**
+  ```json
+  {
+    "userId": 1,
+    "email": "john@example.com",
+    "full_name": "John Doe",
+    "iat": 1640000000,
+    "exp": 1640604800
+  }
+  ```
+
+---
+
+## Security Features
+
+✅ **Password Verification** - Bcrypt password comparison  
+✅ **JWT Tokens** - Secure tokens with 7-day expiration  
+✅ **Input Validation** - Email and password validation  
+✅ **Error Handling** - Proper error messages without exposing sensitive info  
 
 ---
 
@@ -222,84 +193,63 @@ curl -X POST http://localhost:8001/auth/login \
 
 ---
 
-## Security Features
+## Frontend Integration Example
 
-✅ **Password Hashing** - Passwords are hashed using bcrypt with 10 salt rounds  
-✅ **JWT Tokens** - Secure tokens that expire after 7 days  
-✅ **Email Uniqueness** - No duplicate accounts  
-✅ **Input Validation** - All fields validated before processing  
+```javascript
+async function login(email, password) {
+    try {
+        const response = await fetch('http://localhost:8001/auth/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                email_id: email,
+                password: password
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 1) {
+            // Save token
+            localStorage.setItem('authToken', data.token);
+            localStorage.setItem('user', JSON.stringify(data.user));
+            console.log('Login successful');
+            return data;
+        } else {
+            console.error('Login failed:', data.message);
+            alert(data.message);
+            return null;
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Network error');
+        return null;
+    }
+}
+
+// Usage
+login('john@example.com', 'SecurePass123');
+```
 
 ---
 
 ## Common Errors
 
-### "Email already exists"
-**Cause:** Trying to signup with an email that's already registered  
-**Solution:** Use a different email or login with the existing account
-
 ### "Invalid email or password"
-**Cause:** Wrong credentials during login  
-**Solution:** Double-check your email and password
+- Email doesn't exist in database
+- Password is incorrect
+- Check credentials and try again
 
-### "The password field must be at least 6 characters"
-**Cause:** Password is too short  
-**Solution:** Use a password with at least 6 characters
+### "The email_id field is required"
+- Missing email_id in request body
+- Check your request payload
 
----
-
-## Integration Example (Frontend)
-
-### JavaScript Fetch API
-
-```javascript
-// Signup
-async function signup(fullName, email, password, phone) {
-  const response = await fetch('http://localhost:8001/auth/signup', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      full_name: fullName,
-      email_id: email,
-      password: password,
-      phone_number: phone
-    })
-  });
-  
-  const data = await response.json();
-  
-  if (data.status === 1) {
-    console.log('Signup successful:', data.user_id);
-  } else {
-    console.error('Signup failed:', data.message);
-  }
-}
-
-// Login
-async function login(email, password) {
-  const response = await fetch('http://localhost:8001/auth/login', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      email_id: email,
-      password: password
-    })
-  });
-  
-  const data = await response.json();
-  
-  if (data.status === 1) {
-    // Save token to localStorage
-    localStorage.setItem('token', data.token);
-    console.log('Login successful:', data.user);
-  } else {
-    console.error('Login failed:', data.message);
-  }
-}
-```
+### "Database error"
+- Database connection issue
+- Check MySQL server is running
+- Verify database credentials in .env
 
 ---
 

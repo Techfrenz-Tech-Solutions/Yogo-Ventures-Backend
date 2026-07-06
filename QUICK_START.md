@@ -1,17 +1,15 @@
-# Quick Start Guide - Authentication Setup
+# Quick Start Guide - Login Only
 
 ## ✅ What's Been Done
 
-1. ✅ Created `authController.js` with signup and login functions
-2. ✅ Created `authRoutes.js` with 2 endpoints
+1. ✅ Created `authController.js` with login function only
+2. ✅ Created `authRoutes.js` with login endpoint
 3. ✅ Updated `app.js` to include auth routes
-4. ✅ Created documentation
+4. ✅ JWT token generation included
 
 ## 📋 Setup Steps
 
 ### Step 1: Create Database Table
-
-Open MySQL and run:
 
 ```sql
 CREATE TABLE users (
@@ -25,38 +23,43 @@ CREATE TABLE users (
 );
 ```
 
-### Step 2: Start Server
+### Step 2: Create a Test User
+
+Since signup is disabled, you need to manually create users.
+
+**Option A: Using the helper script**
+
+```bash
+node create-test-user.js
+```
+
+This will output a SQL query with a hashed password. Copy and run it in MySQL.
+
+**Option B: Manual process**
+
+1. Generate hashed password:
+```bash
+node -e "const bcrypt = require('bcrypt'); bcrypt.hash('YourPassword', 10).then(hash => console.log(hash));"
+```
+
+2. Insert into database:
+```sql
+INSERT INTO users (full_name, email_id, phone_number, password) 
+VALUES ('Admin User', 'admin@example.com', '9876543210', 'PASTE_HASHED_PASSWORD_HERE');
+```
+
+### Step 3: Start Server
 
 ```bash
 npm start
 ```
 
-You should see:
-```
-Server running on http://192.168.0.29:8001
-```
-
-### Step 3: Test Signup
-
-Open a new terminal and run:
-
-```bash
-curl -X POST http://localhost:8001/auth/signup -H "Content-Type: application/json" -d "{\"full_name\":\"John Doe\",\"email_id\":\"john@test.com\",\"password\":\"Pass123\",\"phone_number\":\"9876543210\"}"
-```
-
-**Expected Response:**
-```json
-{
-  "status": 1,
-  "message": "Account created successfully",
-  "user_id": 1
-}
-```
-
 ### Step 4: Test Login
 
 ```bash
-curl -X POST http://localhost:8001/auth/login -H "Content-Type: application/json" -d "{\"email_id\":\"john@test.com\",\"password\":\"Pass123\"}"
+curl -X POST http://localhost:8001/auth/login \
+  -H "Content-Type: application/json" \
+  -d "{\"email_id\":\"test@example.com\",\"password\":\"Test@123\"}"
 ```
 
 **Expected Response:**
@@ -67,72 +70,85 @@ curl -X POST http://localhost:8001/auth/login -H "Content-Type: application/json
   "token": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "user": {
     "id": 1,
-    "full_name": "John Doe",
-    "email_id": "john@test.com",
+    "full_name": "Test User",
+    "email_id": "test@example.com",
     "phone_number": "9876543210"
   }
 }
 ```
 
-## 🎯 Available Endpoints
+## 🎯 Available Endpoint
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/auth/signup` | Register new user |
 | POST | `/auth/login` | Login and get JWT token |
 
-## 📝 Request Examples
+## 📝 Login Request Format
 
-### Signup Request
 ```json
 {
-  "full_name": "John Doe",
-  "email_id": "john@test.com",
-  "password": "Pass123",
-  "phone_number": "9876543210"
+  "email_id": "test@example.com",
+  "password": "Test@123"
 }
 ```
 
-### Login Request
-```json
-{
-  "email_id": "john@test.com",
-  "password": "Pass123"
-}
+## 🔑 JWT Token Usage
+
+The login endpoint returns a JWT token that expires in 7 days.
+
+**Token Format:**
+```
+Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
-## 🔍 Verify in Database
-
-Check if user was created:
-
-```sql
-SELECT * FROM users;
+**Use in protected routes:**
+```bash
+curl -X POST http://localhost:8001/protected-route \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
 ```
-
-## ✨ Features
-
-- ✅ Password hashing with bcrypt
-- ✅ JWT token generation (7-day expiry)
-- ✅ Email uniqueness validation
-- ✅ Input validation
-- ✅ Proper error handling
 
 ## 📂 Files Created
 
 ```
 controllers/
-  └── authController.js      (signup & login logic)
+  └── authController.js      (login logic only)
 
 routes/
-  └── authRoutes.js          (route definitions)
+  └── authRoutes.js          (login route)
 
 app.js                       (updated with auth routes)
+create-test-user.js          (helper script to create test users)
 AUTH_API_DOCUMENTATION.md    (detailed API docs)
 QUICK_START.md              (this file)
 ```
 
+## 🔍 Verify Setup
+
+1. Check database table exists:
+```sql
+DESCRIBE users;
+```
+
+2. Check test user exists:
+```sql
+SELECT id, full_name, email_id FROM users;
+```
+
+3. Test login endpoint:
+```bash
+curl http://localhost:8001/auth/login -X POST -H "Content-Type: application/json" -d "{\"email_id\":\"test@example.com\",\"password\":\"Test@123\"}"
+```
+
+## ✨ Features
+
+- ✅ Bcrypt password verification
+- ✅ JWT token generation (7-day expiry)
+- ✅ Input validation
+- ✅ Proper error handling
+- ❌ No signup endpoint (as requested)
+
 ## 🎉 You're Ready!
 
-Your authentication system is now set up and ready to use!
+Your login system is ready. Users must be created manually in the database.
 
 For detailed API documentation, see: `AUTH_API_DOCUMENTATION.md`
