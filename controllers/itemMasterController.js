@@ -783,62 +783,90 @@ exports.updateProduct = (req, res) => {
         }
 
         const files = req.files || {};
+        const imageFields = ['index_image', 'image1', 'image2', 'image3', 'image4', 'image5'];
 
-        const query = `
-            UPDATE product_master
-            SET
-                product_code = ?,
-                product_name = ?,
-                category_name = ?,
-                sub_category_name = ?,
-                product_description = ?,
-                index_image = ?,
-                image1 = ?,
-                image2 = ?,
-                image3 = ?,
-                image4 = ?,
-                image5 = ?
-            WHERE id = ?
-        `;
+        const runUpdate = (images) => {
+            const query = `
+                UPDATE product_master
+                SET
+                    product_code = ?,
+                    product_name = ?,
+                    category_name = ?,
+                    sub_category_name = ?,
+                    product_description = ?,
+                    index_image = ?,
+                    image1 = ?,
+                    image2 = ?,
+                    image3 = ?,
+                    image4 = ?,
+                    image5 = ?
+                WHERE id = ?
+            `;
 
-        db.mainDb(
-            query,
-            [
-                reqData.product_code,
-                reqData.product_name,
-                reqData.category_name,
-                reqData.sub_category_name,
-                reqData.product_description,
-                files.index_image?.[0]?.filename || reqData.old_index_image || '',
-                files.image1?.[0]?.filename || reqData.old_image1 || '',
-                files.image2?.[0]?.filename || reqData.old_image2 || '',
-                files.image3?.[0]?.filename || reqData.old_image3 || '',
-                files.image4?.[0]?.filename || reqData.old_image4 || '',
-                files.image5?.[0]?.filename || reqData.old_image5 || '',
-                reqData.id
-            ],
-            (err, result) => {
+            db.mainDb(
+                query,
+                [
+                    reqData.product_code,
+                    reqData.product_name,
+                    reqData.category_name,
+                    reqData.sub_category_name,
+                    reqData.product_description,
+                    images.index_image,
+                    images.image1,
+                    images.image2,
+                    images.image3,
+                    images.image4,
+                    images.image5,
+                    reqData.id
+                ],
+                (err, result) => {
 
-                if (err) {
+                    if (err) {
+                        return res.json({
+                            status: 0,
+                            message: "DB error"
+                        });
+                    }
+
+                    if (result.affectedRows === 0) {
+                        return res.json({
+                            status: 0,
+                            message: "Product not found"
+                        });
+                    }
+
                     return res.json({
-                        status: 0,
-                        message: "DB error"
+                        status: 1,
+                        message: "Product updated successfully"
                     });
                 }
+            );
+        };
 
-                if (result.affectedRows === 0) {
-                    return res.json({
-                        status: 0,
-                        message: "Product not found"
+        const missingUpload = imageFields.some((field) => !files[field]?.[0]);
+
+        if (!missingUpload) {
+            const images = {};
+            imageFields.forEach((field) => { images[field] = files[field][0].filename; });
+            runUpdate(images);
+        } else {
+            db.mainDb(
+                `SELECT index_image, image1, image2, image3, image4, image5 FROM product_master WHERE id = ?`,
+                [reqData.id],
+                (err, existingRows) => {
+                    if (err || existingRows.length === 0) {
+                        return res.json({ status: 0, message: "Product not found" });
+                    }
+
+                    const existing = existingRows[0];
+                    const images = {};
+                    imageFields.forEach((field) => {
+                        images[field] = files[field]?.[0]?.filename || existing[field] || '';
                     });
+                    runUpdate(images);
                 }
-
-                return res.json({
-                    status: 1,
-                    message: "Product updated successfully"
-                });
-            }
-        );
+            );
+        }
     });
 };
 
@@ -1467,47 +1495,60 @@ exports.updateBestSelling = (req, res) => {
             });
         }
 
-        const image = req.file
-            ? req.file.filename
-            : reqData.old_image;
+        const runUpdate = (image) => {
+            const query = `
+                UPDATE best_selling
+                SET
+                    product_name = ?,
+                    image = ?
+                WHERE id = ?
+            `;
 
-        const query = `
-            UPDATE best_selling
-            SET
-                product_name = ?,
-                image = ?
-            WHERE id = ?
-        `;
+            db.mainDb(
+                query,
+                [
+                    reqData.product_name,
+                    image,
+                    reqData.id
+                ],
+                (err, result) => {
 
-        db.mainDb(
-            query,
-            [
-                reqData.product_name,
-                image,
-                reqData.id
-            ],
-            (err, result) => {
+                    if (err) {
+                        return res.json({
+                            status: 0,
+                            message: "DB error"
+                        });
+                    }
 
-                if (err) {
+                    if (result.affectedRows === 0) {
+                        return res.json({
+                            status: 0,
+                            message: "Best Selling not found"
+                        });
+                    }
+
                     return res.json({
-                        status: 0,
-                        message: "DB error"
+                        status: 1,
+                        message: "Best Selling updated successfully"
                     });
                 }
+            );
+        };
 
-                if (result.affectedRows === 0) {
-                    return res.json({
-                        status: 0,
-                        message: "Best Selling not found"
-                    });
+        if (req.file) {
+            runUpdate(req.file.filename);
+        } else {
+            db.mainDb(
+                `SELECT image FROM best_selling WHERE id = ?`,
+                [reqData.id],
+                (err, existing) => {
+                    if (err || existing.length === 0) {
+                        return res.json({ status: 0, message: "Best Selling not found" });
+                    }
+                    runUpdate(existing[0].image);
                 }
-
-                return res.json({
-                    status: 1,
-                    message: "Best Selling updated successfully"
-                });
-            }
-        );
+            );
+        }
     });
 };
 
@@ -1678,47 +1719,60 @@ exports.updateNewArrival = (req, res) => {
             });
         }
 
-        const image = req.file
-            ? req.file.filename
-            : reqData.old_image;
+        const runUpdate = (image) => {
+            const query = `
+                UPDATE new_arrivals
+                SET
+                    product_name = ?,
+                    image = ?
+                WHERE id = ?
+            `;
 
-        const query = `
-            UPDATE new_arrivals
-            SET
-                product_name = ?,
-                image = ?
-            WHERE id = ?
-        `;
+            db.mainDb(
+                query,
+                [
+                    reqData.product_name,
+                    image,
+                    reqData.id
+                ],
+                (err, result) => {
 
-        db.mainDb(
-            query,
-            [
-                reqData.product_name,
-                image,
-                reqData.id
-            ],
-            (err, result) => {
+                    if (err) {
+                        return res.json({
+                            status: 0,
+                            message: "DB error"
+                        });
+                    }
 
-                if (err) {
+                    if (result.affectedRows === 0) {
+                        return res.json({
+                            status: 0,
+                            message: "New Arrival not found"
+                        });
+                    }
+
                     return res.json({
-                        status: 0,
-                        message: "DB error"
+                        status: 1,
+                        message: "New Arrival updated successfully"
                     });
                 }
+            );
+        };
 
-                if (result.affectedRows === 0) {
-                    return res.json({
-                        status: 0,
-                        message: "New Arrival not found"
-                    });
+        if (req.file) {
+            runUpdate(req.file.filename);
+        } else {
+            db.mainDb(
+                `SELECT image FROM new_arrivals WHERE id = ?`,
+                [reqData.id],
+                (err, existing) => {
+                    if (err || existing.length === 0) {
+                        return res.json({ status: 0, message: "New Arrival not found" });
+                    }
+                    runUpdate(existing[0].image);
                 }
-
-                return res.json({
-                    status: 1,
-                    message: "New Arrival updated successfully"
-                });
-            }
-        );
+            );
+        }
     });
 };
 
