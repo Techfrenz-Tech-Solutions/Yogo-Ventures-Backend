@@ -19,4 +19,26 @@ const upload = multer({
     limits: { fileSize: 5 * 1024 * 1024 }
 });
 
-module.exports = upload;
+// Wraps a multer middleware so file-size/type errors come back as normal JSON responses
+const handleUpload = (multerMiddleware) => (req, res, next) => {
+    multerMiddleware(req, res, function (err) {
+        if (err instanceof multer.MulterError) {
+            if (err.code === 'LIMIT_FILE_SIZE') {
+                return res.json({
+                    status: 0,
+                    message: 'File size must be less than 5MB'
+                });
+            }
+            return res.json({ status: 0, message: err.message });
+        } else if (err) {
+            return res.json({
+                status: 0,
+                message: err.message
+            });
+        }
+
+        next();
+    });
+};
+
+module.exports = { upload, handleUpload };

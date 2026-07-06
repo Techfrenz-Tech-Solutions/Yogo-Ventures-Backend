@@ -1,31 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const multer = require('multer');
 
 const itemController = require('../controllers/itemMasterController.js');
-const upload = require('../helper/upload.js');
-
-// Wraps a multer middleware so file-size/type errors come back as normal JSON responses
-const uploadMiddleware = (multerMiddleware) => (req, res, next) => {
-    multerMiddleware(req, res, function (err) {
-        if (err instanceof multer.MulterError) {
-            if (err.code === 'LIMIT_FILE_SIZE') {
-                return res.json({
-                    status: 0,
-                    message: 'File size must be less than 5MB'
-                });
-            }
-            return res.json({ status: 0, message: err.message });
-        } else if (err) {
-            return res.json({
-                status: 0,
-                message: err.message
-            });
-        }
-
-        next();
-    });
-};
+const { upload, handleUpload: uploadMiddleware } = require('../helper/upload.js');
 
 router.post('/countrycreate', itemController.createCountry);
 router.get('/countrylist', itemController.getCountries);
