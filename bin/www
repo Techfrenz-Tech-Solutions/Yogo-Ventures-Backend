@@ -7,12 +7,13 @@
 var app = require('../app');
 var debug = require('debug')('newone:server');
 var http = require('http');
+var os = require('os');
 
 /**
  * Get port from environment and store in Express.
  */
 
-var port = normalizePort(process.env.PORT || '3000');
+var port = normalizePort(process.env.PORT || '7002');
 app.set('port', port);
 
 /**
@@ -87,4 +88,14 @@ function onListening() {
     ? 'pipe ' + addr
     : 'port ' + addr.port;
   debug('Listening on ' + bind);
+
+  if (typeof addr !== 'string') {
+    var lanIps = Object.values(os.networkInterfaces())
+      .flat()
+      .filter((iface) => iface.family === 'IPv4' && !iface.internal)
+      .map((iface) => iface.address);
+
+    console.log(`Server running on http://localhost:${addr.port}`);
+    lanIps.forEach((ip) => console.log(`  also reachable on http://${ip}:${addr.port} (LAN)`));
+  }
 }

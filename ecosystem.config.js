@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: "check",
-      script: "app.js",
+      script: "bin/www",
       watch: true,
       ignore_watch: [
         "node_modules",

@@ -6,7 +6,6 @@ var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 var cors = require('cors');
-const http = require("http");
 
 require('dotenv').config({ debug: false, silent: true, quiet: true });
 
@@ -29,8 +28,6 @@ var ordertrackRouter = require('./routes/itemRoutes');
 
 
 
-const PORT = process.env.PORT || 8001;
-
 var app = express();
 
 // ================== VIEW ENGINE ==================
@@ -38,10 +35,30 @@ app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'pug');
 
 // ================== CORS ==================
+// Allow the Vite dev servers (localhost + LAN, since Vite binds 0.0.0.0)
+// plus any extra origins supplied via ALLOWED_ORIGINS (comma separated).
+const defaultOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174',
+];
+const envOrigins = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+const allowedOrigins = [...new Set([...defaultOrigins, ...envOrigins])];
+const lanOriginPattern = /^https?:\/\/((192\.168|10\.\d+)\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+):\d+$/;
+
 app.use(cors({
-  origin: ["http://localhost:5173","http://localhost:5174"],
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization','cache-control','pragma']
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin) || lanOriginPattern.test(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'cache-control', 'pragma']
 }));
 
 // ================== BODY PARSERS ==================
@@ -54,8 +71,6 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/storage', express.static(path.join(__dirname, 'storage')));
 app.use(logger('dev'));
-
-const { log: showLog } = console;
 
 // ================== ROUTES ==================
 
@@ -91,10 +106,5 @@ app.use(function (err, req, res, next) {
     message: err.message || "Internal server error"
   });
 });
-
-// ================== SERVER ==================
-let server = http.createServer(app);
-
-server.listen(PORT, () => showLog(`Server running on http://192.168.0.20:${PORT}`));
 
 module.exports = app;
