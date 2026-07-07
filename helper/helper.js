@@ -44,15 +44,15 @@ helper.appMaintenance = (req,res,next)=>{
 helper.auth = (req,res,next)=>{
     try{
         const authHeader = req.headers["authorization"];
-        if(!authHeader) return res.json({status:0,message:"Auth token required"});
+        if(!authHeader) return res.status(401).json({status:0,message:"Auth token required"});
         const token = authHeader.split(" ")[1];
-        if(!token) return res.json({status:0,message:"Invalid token"});
-        jwt.verify(token,"SECRET@KEY",(err,decoded)=>{
-            if(err) return res.json({status:0,message:"Invalid/expired token"});
+        if(!token) return res.status(401).json({status:0,message:"Invalid token"});
+        jwt.verify(token,process.env.JWT_SECRET || "SECRET@KEY",(err,decoded)=>{
+            if(err) return res.status(401).json({status:0,message:"Invalid/expired token"});
             req.user = decoded;
             next();
         });
-    }catch(err){ console.log(err); return res.json({status:0,message:"Auth failed"});}
+    }catch(err){ console.log(err); return res.status(401).json({status:0,message:"Auth failed"});}
 }
 
 module.exports = helper;

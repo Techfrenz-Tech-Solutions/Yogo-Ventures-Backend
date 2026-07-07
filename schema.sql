@@ -17,6 +17,17 @@ CREATE TABLE IF NOT EXISTS users (
     updated_date  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
+-- Real admin login matching the credentials shown on the admin panel's
+-- LoginPage.jsx (admin@yogoventures.com / Yogo@123). Hash generated with
+-- bcrypt.hash('Yogo@123', 10) — safe to re-run, INSERT IGNORE skips if it exists.
+INSERT IGNORE INTO users (full_name, email_id, phone_number, password)
+VALUES (
+    'Admin',
+    'admin@yogoventures.com',
+    NULL,
+    '$2b$10$4AE0.O4iXXmAW8WvY5uNr.7EssRMDvkuZlRQY8hQDOB45sAMr0T0.'
+);
+
 -- ── Category / Sub-category ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS category_master (
     id            INT AUTO_INCREMENT PRIMARY KEY,

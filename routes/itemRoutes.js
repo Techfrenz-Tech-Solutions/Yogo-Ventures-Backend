@@ -3,30 +3,34 @@ const router = express.Router();
 
 const itemController = require('../controllers/itemMasterController.js');
 const { upload, handleUpload: uploadMiddleware } = require('../helper/upload.js');
+const { auth } = require('../helper/helper.js');
 
-router.post('/countrycreate', itemController.createCountry);
-router.get('/countrylist', itemController.getCountries);
-router.get('/country/:id', itemController.getCountry);
-router.post('/countryupdate', itemController.updateCountry);
-router.post('/countrydelete', itemController.deleteCountry);
+// ── Country (admin-only) ──────────────────────────────────────
+router.post('/countrycreate', auth, itemController.createCountry);
+router.get('/countrylist', auth, itemController.getCountries);
+router.get('/country/:id', auth, itemController.getCountry);
+router.post('/countryupdate', auth, itemController.updateCountry);
+router.post('/countrydelete', auth, itemController.deleteCountry);
 
 
 
-router.post('/categorycreate', itemController.createCategory);
-router.get('/categorylist', itemController.getCategories);
-router.get('/category/:id', itemController.getCategory);
-router.post('/categoryupdate', itemController.updateCategory);
-router.post('/categorydelete', itemController.deleteCategory);
+// ── Category (dropdown is public — used by the website) ───────
+router.post('/categorycreate', auth, itemController.createCategory);
+router.get('/categorylist', auth, itemController.getCategories);
+router.get('/category/:id', auth, itemController.getCategory);
+router.post('/categoryupdate', auth, itemController.updateCategory);
+router.post('/categorydelete', auth, itemController.deleteCategory);
 
 router.get('/categorydropdown', itemController.categoryDropdown);
 
 
 
-router.post('/sub-categorycreate', itemController.createSubCategory);
+// ── Sub-category (lists are public — used by the website) ─────
+router.post('/sub-categorycreate', auth, itemController.createSubCategory);
 router.get('/sub-categorylist', itemController.getSubCategories);
-router.get('/sub-category/:id', itemController.getSubCategory);
-router.post('/sub-categoryupdate', itemController.updateSubCategory);
-router.post('/sub-categorydelete', itemController.deleteSubCategory);
+router.get('/sub-category/:id', auth, itemController.getSubCategory);
+router.post('/sub-categoryupdate', auth, itemController.updateSubCategory);
+router.post('/sub-categorydelete', auth, itemController.deleteSubCategory);
 router.get('/sub-categorydropdown', itemController.subCategoryDropdown);
 
 
@@ -41,64 +45,72 @@ const productImageFields = upload.fields([
     { name: 'image5', maxCount: 1 }
 ]);
 
-router.post('/productcreate', uploadMiddleware(productImageFields), itemController.createProduct);
+// ── Product (list is public — used by the website) ─────────────
+router.post('/productcreate', auth, uploadMiddleware(productImageFields), itemController.createProduct);
 router.get('/productlist', itemController.getProducts);
-router.get('/product/:id', itemController.getProduct);
-router.post('/productupdate', uploadMiddleware(productImageFields), itemController.updateProduct);
-router.post('/productdelete', itemController.deleteProduct);
+router.get('/product/:id', auth, itemController.getProduct);
+router.post('/productupdate', auth, uploadMiddleware(productImageFields), itemController.updateProduct);
+router.post('/productdelete', auth, itemController.deleteProduct);
 //router.get('/productdropdown', itemController.productDropdown);
 
 
+// ── Quote enquiries (create is public — website "Get a Quote" form) ──
 router.post('/enquiry-quotecreate', itemController.createEnquiryQuote);
-router.get('/enquiry-quotelist', itemController.getEnquiryQuotes);
-router.get('/enquiry-quote/:id', itemController.getEnquiryQuote);
-router.post('/enquiry-quoteupdate-status', itemController.updateEnquiryQuoteStatus);
-router.post('/enquiry-quotedelete', itemController.deleteEnquiryQuote);
+router.get('/enquiry-quotelist', auth, itemController.getEnquiryQuotes);
+router.get('/enquiry-quote/:id', auth, itemController.getEnquiryQuote);
+router.post('/enquiry-quoteupdate-status', auth, itemController.updateEnquiryQuoteStatus);
+router.post('/enquiry-quotedelete', auth, itemController.deleteEnquiryQuote);
 
 
+// ── Contact us (create is public — website contact form) ───────
 router.post('/contact-uscreate', itemController.createContactUs);
-router.get('/contact-uslist', itemController.getContactUsList);
-router.get('/contact-us/:id', itemController.getContactUs);
-router.post('/contact-usupdate-status', itemController.updateContactUsStatus);
-router.post('/contact-usdelete', itemController.deleteContactUs);
+router.get('/contact-uslist', auth, itemController.getContactUsList);
+router.get('/contact-us/:id', auth, itemController.getContactUs);
+router.post('/contact-usupdate-status', auth, itemController.updateContactUsStatus);
+router.post('/contact-usdelete', auth, itemController.deleteContactUs);
 
 
 
 
-router.post('/best-sellingcreate', uploadMiddleware(upload.single('image')), itemController.createBestSelling);
+// ── Best selling (list is public — homepage) ────────────────────
+router.post('/best-sellingcreate', auth, uploadMiddleware(upload.single('image')), itemController.createBestSelling);
 router.get('/best-sellinglist', itemController.getBestSellingList);
-router.get('/best-selling/:id', itemController.getBestSelling);
-router.post('/best-sellingupdate', uploadMiddleware(upload.single('image')), itemController.updateBestSelling);
-router.post('/best-sellingdelete', itemController.deleteBestSelling);
+router.get('/best-selling/:id', auth, itemController.getBestSelling);
+router.post('/best-sellingupdate', auth, uploadMiddleware(upload.single('image')), itemController.updateBestSelling);
+router.post('/best-sellingdelete', auth, itemController.deleteBestSelling);
 
 
-router.post('/new-arrivalcreate', uploadMiddleware(upload.single('image')), itemController.createNewArrival);
+// ── New arrivals (list is public — homepage) ─────────────────────
+router.post('/new-arrivalcreate', auth, uploadMiddleware(upload.single('image')), itemController.createNewArrival);
 router.get('/new-arrivallist', itemController.getNewArrivalList);
-router.get('/new-arrival/:id', itemController.getNewArrival);
-router.post('/new-arrivalupdate', uploadMiddleware(upload.single('image')), itemController.updateNewArrival);
-router.post('/new-arrivaldelete', itemController.deleteNewArrival);
+router.get('/new-arrival/:id', auth, itemController.getNewArrival);
+router.post('/new-arrivalupdate', auth, uploadMiddleware(upload.single('image')), itemController.updateNewArrival);
+router.post('/new-arrivaldelete', auth, itemController.deleteNewArrival);
 
 
+// ── General enquiry (create is public — website enquiry form) ──
 router.post('/enquirycreate', itemController.createEnquiry);
-router.get('/enquirylist', itemController.getEnquiries);
-router.get('/enquiry/:id', itemController.getEnquiry);
-router.post('/enquiryupdate-status', itemController.updateEnquiryStatus);
-router.post('/enquirydelete', itemController.deleteEnquiry);
+router.get('/enquirylist', auth, itemController.getEnquiries);
+router.get('/enquiry/:id', auth, itemController.getEnquiry);
+router.post('/enquiryupdate-status', auth, itemController.updateEnquiryStatus);
+router.post('/enquirydelete', auth, itemController.deleteEnquiry);
 
 
 
-router.post('/customercreate', itemController.createCustomer);
-router.get('/customerlist', itemController.getCustomers);
-router.get('/customer/:id', itemController.getCustomer);
-router.post('/customerupdate', itemController.updateCustomer);
-router.post('/customerdelete', itemController.deleteCustomer);
+// ── Customer (admin-only) ───────────────────────────────────────
+router.post('/customercreate', auth, itemController.createCustomer);
+router.get('/customerlist', auth, itemController.getCustomers);
+router.get('/customer/:id', auth, itemController.getCustomer);
+router.post('/customerupdate', auth, itemController.updateCustomer);
+router.post('/customerdelete', auth, itemController.deleteCustomer);
 
 
-router.post('/order-trackingcreate', itemController.createOrderTracking);
-router.get('/order-trackinglist', itemController.getOrderTrackingList);
-router.get('/order-tracking/:id', itemController.getOrderTracking);
-router.post('/order-trackingupdate', itemController.updateOrderTracking);
-router.post('/order-trackingdelete', itemController.deleteOrderTracking);
+// ── Order tracking (admin-only) ─────────────────────────────────
+router.post('/order-trackingcreate', auth, itemController.createOrderTracking);
+router.get('/order-trackinglist', auth, itemController.getOrderTrackingList);
+router.get('/order-tracking/:id', auth, itemController.getOrderTracking);
+router.post('/order-trackingupdate', auth, itemController.updateOrderTracking);
+router.post('/order-trackingdelete', auth, itemController.deleteOrderTracking);
 
 
 module.exports = router;
