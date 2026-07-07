@@ -353,9 +353,10 @@ exports.categoryDropdown = (req, res) => {
 
     const query = `
         SELECT
+            id,
             category_name
         FROM category_master
-        ORDER BY category_name ASC
+        ORDER BY id ASC
     `;
 
     db.mainDb(query, [], (err, result) => {
