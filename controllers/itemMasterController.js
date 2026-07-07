@@ -1,5 +1,21 @@
 const { Validator } = require("node-input-validator");
+const path = require('path');
+const fs = require('fs');
 const db = require('../models/db.js');
+const { storageDir } = require('../helper/upload.js');
+
+// Best-effort delete of a previously-uploaded image by filename (as stored
+// in the DB) — used when an update replaces an image or a record carrying
+// images is deleted. Never throws; a missing/already-gone file is not an error.
+function deleteStorageFile(filename) {
+    if (!filename) return;
+    fs.unlink(path.join(storageDir, filename), (err) => {
+        if (err && err.code !== 'ENOENT') {
+            console.error('Failed to remove old image:', filename, err.message);
+        }
+    });
+}
+
 // Create Enquiry
 exports.createCountry = (req, res) => {
     const reqData = req.body;
@@ -785,7 +801,7 @@ exports.updateProduct = (req, res) => {
         const files = req.files || {};
         const imageFields = ['index_image', 'image1', 'image2', 'image3', 'image4', 'image5'];
 
-        const runUpdate = (images) => {
+        const runUpdate = (images, filesToDelete) => {
             const query = `
                 UPDATE product_master
                 SET
@@ -835,6 +851,11 @@ exports.updateProduct = (req, res) => {
                         });
                     }
 
+                    // Only remove replaced images once the DB write has
+                    // actually succeeded, so a failed update never leaves a
+                    // product referencing a file that no longer exists.
+                    filesToDelete.forEach(deleteStorageFile);
+
                     return res.json({
                         status: 1,
                         message: "Product updated successfully"
@@ -843,30 +864,33 @@ exports.updateProduct = (req, res) => {
             );
         };
 
-        const missingUpload = imageFields.some((field) => !files[field]?.[0]);
-
-        if (!missingUpload) {
-            const images = {};
-            imageFields.forEach((field) => { images[field] = files[field][0].filename; });
-            runUpdate(images);
-        } else {
-            db.mainDb(
-                `SELECT index_image, image1, image2, image3, image4, image5 FROM product_master WHERE id = ?`,
-                [reqData.id],
-                (err, existingRows) => {
-                    if (err || existingRows.length === 0) {
-                        return res.json({ status: 0, message: "Product not found" });
-                    }
-
-                    const existing = existingRows[0];
-                    const images = {};
-                    imageFields.forEach((field) => {
-                        images[field] = files[field]?.[0]?.filename || existing[field] || '';
-                    });
-                    runUpdate(images);
+        // Always look up the existing row first — this is what tells us
+        // which on-disk files, if any, get replaced and should be cleaned up.
+        db.mainDb(
+            `SELECT index_image, image1, image2, image3, image4, image5 FROM product_master WHERE id = ?`,
+            [reqData.id],
+            (err, existingRows) => {
+                if (err || existingRows.length === 0) {
+                    return res.json({ status: 0, message: "Product not found" });
                 }
-            );
-        }
+
+                const existing = existingRows[0];
+                const images = {};
+                const filesToDelete = [];
+                imageFields.forEach((field) => {
+                    const newFilename = files[field]?.[0]?.filename;
+                    if (newFilename) {
+                        images[field] = newFilename;
+                        if (existing[field] && existing[field] !== newFilename) {
+                            filesToDelete.push(existing[field]);
+                        }
+                    } else {
+                        images[field] = existing[field] || '';
+                    }
+                });
+                runUpdate(images, filesToDelete);
+            }
+        );
     });
 };
 
@@ -875,28 +899,43 @@ exports.deleteProduct = (req, res) => {
     const id = req.body.id;
 
     db.mainDb(
-        `DELETE FROM product_master WHERE id = ?`,
+        `SELECT index_image, image1, image2, image3, image4, image5 FROM product_master WHERE id = ?`,
         [id],
-        (err, result) => {
-
-            if (err) {
-                return res.json({
-                    status: 0,
-                    message: "DB error"
-                });
+        (selectErr, existingRows) => {
+            if (selectErr) {
+                return res.json({ status: 0, message: "DB error" });
             }
 
-            if (result.affectedRows === 0) {
-                return res.json({
-                    status: 0,
-                    message: "Product not found"
-                });
-            }
+            db.mainDb(
+                `DELETE FROM product_master WHERE id = ?`,
+                [id],
+                (err, result) => {
 
-            return res.json({
-                status: 1,
-                message: "Product deleted successfully"
-            });
+                    if (err) {
+                        return res.json({
+                            status: 0,
+                            message: "DB error"
+                        });
+                    }
+
+                    if (result.affectedRows === 0) {
+                        return res.json({
+                            status: 0,
+                            message: "Product not found"
+                        });
+                    }
+
+                    if (existingRows.length > 0) {
+                        ['index_image', 'image1', 'image2', 'image3', 'image4', 'image5']
+                            .forEach((field) => deleteStorageFile(existingRows[0][field]));
+                    }
+
+                    return res.json({
+                        status: 1,
+                        message: "Product deleted successfully"
+                    });
+                }
+            );
         }
     );
 };
@@ -1495,7 +1534,7 @@ exports.updateBestSelling = (req, res) => {
             });
         }
 
-        const runUpdate = (image) => {
+        const runUpdate = (image, oldImageToDelete) => {
             const query = `
                 UPDATE best_selling
                 SET
@@ -1527,6 +1566,8 @@ exports.updateBestSelling = (req, res) => {
                         });
                     }
 
+                    if (oldImageToDelete) deleteStorageFile(oldImageToDelete);
+
                     return res.json({
                         status: 1,
                         message: "Best Selling updated successfully"
@@ -1535,20 +1576,21 @@ exports.updateBestSelling = (req, res) => {
             );
         };
 
-        if (req.file) {
-            runUpdate(req.file.filename);
-        } else {
-            db.mainDb(
-                `SELECT image FROM best_selling WHERE id = ?`,
-                [reqData.id],
-                (err, existing) => {
-                    if (err || existing.length === 0) {
-                        return res.json({ status: 0, message: "Best Selling not found" });
-                    }
-                    runUpdate(existing[0].image);
+        db.mainDb(
+            `SELECT image FROM best_selling WHERE id = ?`,
+            [reqData.id],
+            (err, existing) => {
+                if (err || existing.length === 0) {
+                    return res.json({ status: 0, message: "Best Selling not found" });
                 }
-            );
-        }
+                if (req.file) {
+                    const oldImage = existing[0].image;
+                    runUpdate(req.file.filename, oldImage && oldImage !== req.file.filename ? oldImage : null);
+                } else {
+                    runUpdate(existing[0].image, null);
+                }
+            }
+        );
     });
 };
 
@@ -1557,6 +1599,14 @@ exports.updateBestSelling = (req, res) => {
 exports.deleteBestSelling = (req, res) => {
 
     const id = req.body.id;
+
+    db.mainDb(
+        `SELECT image FROM best_selling WHERE id = ?`,
+        [id],
+        (selectErr, existingRows) => {
+            if (selectErr) {
+                return res.json({ status: 0, message: "DB error" });
+            }
 
     db.mainDb(
         `DELETE FROM best_selling WHERE id = ?`,
@@ -1577,10 +1627,14 @@ exports.deleteBestSelling = (req, res) => {
                 });
             }
 
+            if (existingRows.length > 0) deleteStorageFile(existingRows[0].image);
+
             return res.json({
                 status: 1,
                 message: "Best Selling deleted successfully"
             });
+        }
+    );
         }
     );
 };
@@ -1719,7 +1773,7 @@ exports.updateNewArrival = (req, res) => {
             });
         }
 
-        const runUpdate = (image) => {
+        const runUpdate = (image, oldImageToDelete) => {
             const query = `
                 UPDATE new_arrivals
                 SET
@@ -1751,6 +1805,8 @@ exports.updateNewArrival = (req, res) => {
                         });
                     }
 
+                    if (oldImageToDelete) deleteStorageFile(oldImageToDelete);
+
                     return res.json({
                         status: 1,
                         message: "New Arrival updated successfully"
@@ -1759,20 +1815,21 @@ exports.updateNewArrival = (req, res) => {
             );
         };
 
-        if (req.file) {
-            runUpdate(req.file.filename);
-        } else {
-            db.mainDb(
-                `SELECT image FROM new_arrivals WHERE id = ?`,
-                [reqData.id],
-                (err, existing) => {
-                    if (err || existing.length === 0) {
-                        return res.json({ status: 0, message: "New Arrival not found" });
-                    }
-                    runUpdate(existing[0].image);
+        db.mainDb(
+            `SELECT image FROM new_arrivals WHERE id = ?`,
+            [reqData.id],
+            (err, existing) => {
+                if (err || existing.length === 0) {
+                    return res.json({ status: 0, message: "New Arrival not found" });
                 }
-            );
-        }
+                if (req.file) {
+                    const oldImage = existing[0].image;
+                    runUpdate(req.file.filename, oldImage && oldImage !== req.file.filename ? oldImage : null);
+                } else {
+                    runUpdate(existing[0].image, null);
+                }
+            }
+        );
     });
 };
 
@@ -1780,6 +1837,14 @@ exports.updateNewArrival = (req, res) => {
 exports.deleteNewArrival = (req, res) => {
 
     const id = req.body.id;
+
+    db.mainDb(
+        `SELECT image FROM new_arrivals WHERE id = ?`,
+        [id],
+        (selectErr, existingRows) => {
+            if (selectErr) {
+                return res.json({ status: 0, message: "DB error" });
+            }
 
     db.mainDb(
         `DELETE FROM new_arrivals WHERE id = ?`,
@@ -1800,10 +1865,14 @@ exports.deleteNewArrival = (req, res) => {
                 });
             }
 
+            if (existingRows.length > 0) deleteStorageFile(existingRows[0].image);
+
             return res.json({
                 status: 1,
                 message: "New Arrival deleted successfully"
             });
+        }
+    );
         }
     );
 };

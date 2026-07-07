@@ -41,6 +41,13 @@ exports.login = async (req, res) => {
 
             const user = result[0];
 
+            // Account disabled — treat a missing `status` column/value as
+            // active so this doesn't break against a database created
+            // before that column existed.
+            if (user.status && user.status !== 'active') {
+                return res.json({ status: 0, message: "This account is disabled" });
+            }
+
             // Compare password
             const isPasswordValid = await bcrypt.compare(reqData.password, user.password);
 
@@ -48,14 +55,17 @@ exports.login = async (req, res) => {
                 return res.json({ status: 0, message: "Invalid email or password" });
             }
 
+            const role = user.role || 'admin';
+
             // Generate JWT token
             const token = jwt.sign(
                 {
                     userId: user.id,
                     email: user.email_id,
-                    full_name: user.full_name
+                    full_name: user.full_name,
+                    role
                 },
-                process.env.JWT_SECRET || "SECRET@KEY",
+                process.env.JWT_SECRET,
                 { expiresIn: "7d" }
             );
 
@@ -67,7 +77,8 @@ exports.login = async (req, res) => {
                     id: user.id,
                     full_name: user.full_name,
                     email_id: user.email_id,
-                    phone_number: user.phone_number
+                    phone_number: user.phone_number,
+                    role
                 }
             });
         });

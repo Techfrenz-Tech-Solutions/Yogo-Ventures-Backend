@@ -71,9 +71,8 @@ npm install
 ## 🗃️ Local Database Setup
 
 The full schema lives in [`schema.sql`](./schema.sql) at the repo root — it's the
-source of truth for every table this API reads/writes, including the real
-admin login user. It's idempotent (`CREATE TABLE IF NOT EXISTS`, `INSERT IGNORE`),
-so it's safe to re-run.
+source of truth for every table this API reads/writes. It's idempotent
+(`CREATE TABLE IF NOT EXISTS`), so it's safe to re-run.
 
 **Option A — command line:**
 ```bash
@@ -92,9 +91,18 @@ mysql -u root -p < schema.sql
    script creates and switches to `yogoventures` itself).
 2. Paste the contents of `schema.sql`, click **Go**.
 
-This creates the `yogoventures` database and every table the code queries,
-plus one ready-to-use admin login: `admin@yogoventures.com` / `Yogo@123`
-(matches what's shown on the admin panel's login screen).
+This creates the `yogoventures` database and every table the code queries.
+**No admin user is seeded** — there is no default/known password anywhere in
+this repo. Create your own with:
+
+```bash
+node create-admin.js you@example.com "YourOwnStrongPassword123"
+```
+
+This prints an `INSERT ... ON DUPLICATE KEY UPDATE` statement with a
+bcrypt-hashed password — copy/paste it into the same MySQL session you used
+for `schema.sql`. Re-running it with a new password resets an existing
+admin's login, so it doubles as a password-reset tool.
 
 If your MySQL instance uses different credentials, or you're pointing at an
 existing database with a different name, just set `DB_*` in `.env` (below) —
@@ -123,15 +131,21 @@ DB_NAME=yogoventures
 # are already allowed by default — see app.js)
 ALLOWED_ORIGINS=
 
-# JWT Configuration — secret used to sign/verify login tokens
-JWT_SECRET=SECRET@KEY
+# JWT Configuration — secret used to sign/verify login tokens. Required.
+# Generate one with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+JWT_SECRET=replace_with_a_long_random_string
 ```
 
-> **Not needed for local dev:** `AWS_ACCESS_KEY_ID`, `RAZORPAY_KEY_ID`, etc.
-> are only referenced by `controllers/userController.js`, which belongs to a
-> different, unrelated project and isn't wired into `app.js` at all (see
-> [Project Structure](#-project-structure) note below). The live Yogo
-> Ventures API never touches AWS SES or Razorpay.
+There is no fallback secret — if `JWT_SECRET` is missing and `NODE_ENV=production`,
+the server refuses to start. In any other mode it auto-generates a random
+secret for that run only (existing tokens won't survive a restart), so set a
+real value here to avoid that.
+
+> **Not needed:** `AWS_ACCESS_KEY_ID`, `RAZORPAY_KEY_ID`, etc. aren't used
+> anywhere in this app. They were only referenced by an unrelated dead
+> controller (`userController.js`) that has since been removed, along with
+> the `@aws-sdk/client-ses`, `razorpay`, and `nodemailer` dependencies it
+> needed. The live Yogo Ventures API never touches AWS SES or Razorpay.
 
 ## 📡 API Endpoints
 
@@ -226,9 +240,11 @@ JWT_SECRET=SECRET@KEY
 ### Health Check
 - `GET /` 🌐 — API health check, no DB required
 
-> `controllers/userController.js` and `routes/userRouter.js` (OTP login, wallet,
-> tickets, referral profit) are **not mounted in `app.js`** and belong to an
-> unrelated project — they're unreachable dead code, not part of this API.
+> An unrelated OTP-login/wallet/tickets controller and router
+> (`userController.js`/`userRouter.js`) used to live in this repo, unmounted
+> and unreachable. It's been removed entirely, along with the `mo_*`-table
+> queries, generic CRUD helpers, and AWS/Razorpay/nodemailer dependencies it
+> was the only thing using.
 
 ## 🗄️ Database
 
@@ -248,11 +264,10 @@ file is the source of truth, not this list:
 - `customer_master` - Customer information
 - `order_tracking` - Order tracking details (FK → `customer_master.id`)
 
-`mo_user_info`, `mo_user_wallet`, `mo_mail_otp_logs`, `mo_mobile_otp_logs` and
-similar `mo_*` tables are **not** part of this schema — they belong to
-`controllers/userController.js`, which is unrelated leftover code that isn't
-mounted in `app.js` (see the note under [API Endpoints](#-api-endpoints)).
-You don't need them.
+There used to be a note here about `mo_user_info`/`mo_wallet`/etc. tables —
+those belonged to the unrelated dead controller mentioned under
+[API Endpoints](#-api-endpoints), which has since been deleted. You don't
+need them.
 
 ## 🔑 Authentication
 
@@ -260,7 +275,7 @@ Get a token:
 ```bash
 curl -X POST http://localhost:7002/auth/login \
   -H "Content-Type: application/json" \
-  -d "{\"email_id\":\"admin@yogoventures.com\",\"password\":\"Yogo@123\"}"
+  -d "{\"email_id\":\"you@example.com\",\"password\":\"YourOwnStrongPassword123\"}"
 ```
 Response: `{ "status": 1, "token": "Bearer eyJ...", "user": { ... } }`
 
@@ -292,10 +307,11 @@ curl http://localhost:7002/
 # 2. Hits the DB — should return {"status":1,"data":[...]}, not "DB error"
 curl http://localhost:7002/category/categorydropdown
 
-# 3. Login should succeed if schema.sql was imported
+# 3. Login should succeed once you've run `node create-admin.js ...` (see
+#    "Local Database Setup" above) and applied the SQL it printed
 curl -X POST http://localhost:7002/auth/login \
   -H "Content-Type: application/json" \
-  -d "{\"email_id\":\"admin@yogoventures.com\",\"password\":\"Yogo@123\"}"
+  -d "{\"email_id\":\"you@example.com\",\"password\":\"YourOwnStrongPassword123\"}"
 ```
 If step 2 returns `{"status":0,"message":"DB error"}`, the server is running
 but can't reach MySQL — double check `DB_*` in `.env` and that MySQL is
@@ -320,26 +336,25 @@ Yogo-Ventures-Backend/
 ├── bin/
 │   └── www                 # Server entry point (npm start runs this)
 ├── controllers/
-│   ├── authController.js       # Real, mounted — /auth/login
-│   ├── itemMasterController.js # Real, mounted — everything in schema.sql
-│   ├── uploadController.js     # Real, mounted — generic /upload
-│   └── userController.js       # NOT mounted — unrelated project, dead code
+│   ├── authController.js       # /auth/login — bcrypt + JWT
+│   ├── itemMasterController.js # Everything in schema.sql
+│   └── uploadController.js     # Generic /upload
 ├── helper/
-│   ├── common.js           # Unused generic UPDATE helper (only used by userController.js)
-│   ├── helper.js           # JWT `auth` middleware + unused generic CRUD/maintenance helpers
-│   └── upload.js           # Multer config — writes into storage/
+│   ├── helper.js           # JWT `auth` middleware
+│   ├── rateLimiters.js     # express-rate-limit configs (login + public forms)
+│   └── upload.js           # Multer config: type/MIME/magic-byte validation, writes into storage/
 ├── models/
 │   └── db.js                # MySQL pool, reads DB_* from .env
 ├── routes/
 │   ├── authRoutes.js       # Mounted at /auth
 │   ├── itemRoutes.js       # Mounted 11x under different prefixes — see API Endpoints
-│   ├── uploadRoutes.js     # Mounted at /upload
-│   └── userRouter.js       # NOT mounted — unrelated project, dead code
+│   └── uploadRoutes.js     # Mounted at /upload
 ├── storage/                # Uploaded product/best-selling/new-arrival images (served at /storage)
-├── views/                  # Pug templates (error/index/layout)
+├── views/                  # Pug templates (error/index/layout) — configured but never rendered
 ├── .env                    # Your local config — gitignored
 ├── .env.example            # Template for .env
-├── app.js                  # Express app: middleware, CORS, route mounting
+├── app.js                  # Express app: helmet, CORS, JWT_SECRET guard, route mounting
+├── create-admin.js         # Prints SQL to create/reset an admin login (bcrypt-hashed)
 ├── ecosystem.config.js     # PM2 config
 ├── package.json
 ├── schema.sql               # Source of truth for the DB — see Local Database Setup

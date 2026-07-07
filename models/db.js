@@ -7,7 +7,9 @@ const pool = mysql.createPool({
     password: process.env.DB_PASSWORD || "",
     database: process.env.DB_NAME || "yogoventures",
     connectionLimit: 50,
-    multipleStatements: true
+    // Stacked queries aren't needed by any live query and only widen the
+    // blast radius of a future SQL-injection bug — keep this off.
+    multipleStatements: false
 });
 
 exports.mainDb = async function (query, values, callback) {

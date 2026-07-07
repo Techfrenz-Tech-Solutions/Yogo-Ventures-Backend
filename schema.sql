@@ -3,36 +3,26 @@
 -- (or paste into a MySQL client). Matches every table/column referenced by
 -- the routes actually mounted in app.js — controllers/itemMasterController.js
 -- and controllers/authController.js.
---
--- NOT included here: the mo_* tables referenced by controllers/userController.js
--- (mo_user_info, mo_user_wallet, mo_wallet_request, mo_user_tickets, etc.) and
--- sitesetting (helper.appMaintenance). That controller/router pair belongs to
--- an unrelated project and userRouter.js is never mounted in app.js, so it's
--- dead code — see the audit summary for details.
 
 CREATE DATABASE IF NOT EXISTS yogoventures;
 USE yogoventures;
 
--- ── Auth (see QUICK_START.md) ──────────────────────────────────────────
+-- ── Auth ─────────────────────────────────────────────────────────────────
+-- No admin user is seeded here on purpose — there is no default/known
+-- password baked into this repo. Create your local admin with:
+--   node create-admin.js you@example.com "YourOwnPassword123"
+-- which hashes the password with bcrypt and prints the INSERT to run. See
+-- README.md's "Local Database Setup" section for details.
 CREATE TABLE IF NOT EXISTS users (
     id            INT AUTO_INCREMENT PRIMARY KEY,
     full_name     VARCHAR(255) NOT NULL,
     email_id      VARCHAR(255) NOT NULL UNIQUE,
     phone_number  VARCHAR(20)  DEFAULT NULL,
     password      VARCHAR(255) NOT NULL,
+    role          VARCHAR(20)  NOT NULL DEFAULT 'admin',
+    status        VARCHAR(20)  NOT NULL DEFAULT 'active',
     created_date  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_date  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
-
--- Real admin login matching the credentials shown on the admin panel's
--- LoginPage.jsx (admin@yogoventures.com / Yogo@123). Hash generated with
--- bcrypt.hash('Yogo@123', 10) — safe to re-run, INSERT IGNORE skips if it exists.
-INSERT IGNORE INTO users (full_name, email_id, phone_number, password)
-VALUES (
-    'Admin',
-    'admin@yogoventures.com',
-    NULL,
-    '$2b$10$4AE0.O4iXXmAW8WvY5uNr.7EssRMDvkuZlRQY8hQDOB45sAMr0T0.'
 );
 
 -- ── Country ──────────────────────────────────────────────────────────────

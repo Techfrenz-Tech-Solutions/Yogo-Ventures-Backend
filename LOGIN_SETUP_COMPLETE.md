@@ -232,12 +232,14 @@ async function fetchProtectedData() {
 
 ## Environment Variables
 
-Add to your `.env` file (optional):
+Add to your `.env` file (required — see `.env.example`):
 ```env
 JWT_SECRET=your_secret_key_here
 ```
 
-If not set, defaults to `SECRET@KEY` (change this in production!)
+There is no default/fallback value. The server won't start in production
+without this set, and generates a temporary random one in dev if it's missing
+(existing tokens won't survive a restart until you set a real value).
 
 ---
 

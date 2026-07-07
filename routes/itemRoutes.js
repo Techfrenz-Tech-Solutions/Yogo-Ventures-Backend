@@ -4,6 +4,7 @@ const router = express.Router();
 const itemController = require('../controllers/itemMasterController.js');
 const { upload, handleUpload: uploadMiddleware } = require('../helper/upload.js');
 const { auth } = require('../helper/helper.js');
+const { publicFormLimiter } = require('../helper/rateLimiters.js');
 
 // ── Country (admin-only) ──────────────────────────────────────
 router.post('/countrycreate', auth, itemController.createCountry);
@@ -55,7 +56,7 @@ router.post('/productdelete', auth, itemController.deleteProduct);
 
 
 // ── Quote enquiries (create is public — website "Get a Quote" form) ──
-router.post('/enquiry-quotecreate', itemController.createEnquiryQuote);
+router.post('/enquiry-quotecreate', publicFormLimiter, itemController.createEnquiryQuote);
 router.get('/enquiry-quotelist', auth, itemController.getEnquiryQuotes);
 router.get('/enquiry-quote/:id', auth, itemController.getEnquiryQuote);
 router.post('/enquiry-quoteupdate-status', auth, itemController.updateEnquiryQuoteStatus);
@@ -63,7 +64,7 @@ router.post('/enquiry-quotedelete', auth, itemController.deleteEnquiryQuote);
 
 
 // ── Contact us (create is public — website contact form) ───────
-router.post('/contact-uscreate', itemController.createContactUs);
+router.post('/contact-uscreate', publicFormLimiter, itemController.createContactUs);
 router.get('/contact-uslist', auth, itemController.getContactUsList);
 router.get('/contact-us/:id', auth, itemController.getContactUs);
 router.post('/contact-usupdate-status', auth, itemController.updateContactUsStatus);
@@ -89,7 +90,7 @@ router.post('/new-arrivaldelete', auth, itemController.deleteNewArrival);
 
 
 // ── General enquiry (create is public — website enquiry form) ──
-router.post('/enquirycreate', itemController.createEnquiry);
+router.post('/enquirycreate', publicFormLimiter, itemController.createEnquiry);
 router.get('/enquirylist', auth, itemController.getEnquiries);
 router.get('/enquiry/:id', auth, itemController.getEnquiry);
 router.post('/enquiryupdate-status', auth, itemController.updateEnquiryStatus);
