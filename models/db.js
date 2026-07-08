@@ -1,36 +1,16 @@
 const mysql = require("mysql");
 
-// const pool = mysql.createPool({
-//     connectionLimit: 50,          
-//     connectTimeout: 30 * 1000,    
-//     acquireTimeout: 60 * 1000,   
-//     timeout: 60 * 1000,
-//     multipleStatements: true,
-//     host: "localhost",
-//     user: "sa",
-//     password: "sa@123456",
-//     database: "Aandavartools",
-//     port: 3306
-// });
-
-
 const pool = mysql.createPool({
-    host: "localhost",
-    user: "root",
-    password: "",
-    database: "yogoventures",
-   // port: 3306,
+    host: process.env.DB_HOST || "localhost",
+    port: process.env.DB_PORT || 3306,
+    user: process.env.DB_USER || "root",
+    password: process.env.DB_PASSWORD || "",
+    database: process.env.DB_NAME || "yogoventures",
     connectionLimit: 50,
-    multipleStatements: true
+    // Stacked queries aren't needed by any live query and only widen the
+    // blast radius of a future SQL-injection bug — keep this off.
+    multipleStatements: false
 });
-
-
-
-
-
-
-
-
 
 exports.mainDb = async function (query, values, callback) {
     pool.getConnection((err, connection) => {
