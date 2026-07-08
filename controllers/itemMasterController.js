@@ -390,6 +390,33 @@ exports.categoryDropdown = (req, res) => {
     });
 };
 
+
+// Country Dropdown (public — used by the website's contact form)
+exports.countryDropdown = (req, res) => {
+
+    const query = `
+        SELECT
+            id,
+            country_name
+        FROM country_master
+        ORDER BY id ASC
+    `;
+
+    db.mainDb(query, [], (err, result) => {
+        if (err) {
+            return res.json({
+                status: 0,
+                message: "DB error"
+            });
+        }
+
+        return res.json({
+            status: 1,
+            data: result
+        });
+    });
+};
+
 //-----------------------------------------------------------------------------
 
 // Create Sub Category

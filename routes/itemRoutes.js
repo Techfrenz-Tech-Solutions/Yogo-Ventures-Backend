@@ -6,12 +6,14 @@ const { upload, handleUpload: uploadMiddleware } = require('../helper/upload.js'
 const { auth } = require('../helper/helper.js');
 const { publicFormLimiter } = require('../helper/rateLimiters.js');
 
-// ── Country (admin-only) ──────────────────────────────────────
+// ── Country (dropdown is public — used by the website contact form) ──
 router.post('/countrycreate', auth, itemController.createCountry);
 router.get('/countrylist', auth, itemController.getCountries);
 router.get('/country/:id', auth, itemController.getCountry);
 router.post('/countryupdate', auth, itemController.updateCountry);
 router.post('/countrydelete', auth, itemController.deleteCountry);
+
+router.get('/countrydropdown', itemController.countryDropdown);
 
 
 
