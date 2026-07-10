@@ -173,3 +173,89 @@ CREATE TABLE IF NOT EXISTS order_tracking (
         FOREIGN KEY (customer_id) REFERENCES customer_master(id)
         ON DELETE RESTRICT ON UPDATE CASCADE
 );
+
+-- ── Quote confirmation email support (see migrations/002_quote_confirmation_email.sql) ──
+-- Column adds are guarded via information_schema rather than
+-- `ADD COLUMN IF NOT EXISTS`, which MySQL 8.0 (unlike MariaDB) does not support.
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'get_enquire_quote' AND column_name = 'reference_number'
+);
+SET @sql := IF(@col_exists = 0,
+    'ALTER TABLE get_enquire_quote ADD COLUMN reference_number VARCHAR(30) NULL UNIQUE',
+    'SELECT 1');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'get_enquire_quote' AND column_name = 'items_json'
+);
+SET @sql := IF(@col_exists = 0,
+    'ALTER TABLE get_enquire_quote ADD COLUMN items_json MEDIUMTEXT NULL',
+    'SELECT 1');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+CREATE TABLE IF NOT EXISTS email_templates (
+    id                      INT AUTO_INCREMENT PRIMARY KEY,
+    template_key            VARCHAR(100) NOT NULL UNIQUE,
+    name                    VARCHAR(150) NOT NULL,
+    subject                 VARCHAR(255) NOT NULL,
+    html_content            MEDIUMTEXT NOT NULL,
+    text_content            MEDIUMTEXT,
+    is_active               TINYINT(1) NOT NULL DEFAULT 1,
+    heading                 VARCHAR(255) NOT NULL DEFAULT 'Thank You for Your Enquiry!',
+    intro_text              VARCHAR(1000) NOT NULL DEFAULT '',
+    response_text           VARCHAR(500) NOT NULL DEFAULT '',
+    footer_text             VARCHAR(500) NOT NULL DEFAULT '',
+    sender_name             VARCHAR(150) NOT NULL DEFAULT 'YoGo Ventures',
+    reply_to                VARCHAR(255) NULL,
+    show_phone              TINYINT(1) NOT NULL DEFAULT 1,
+    show_message            TINYINT(1) NOT NULL DEFAULT 1,
+    show_product_images     TINYINT(1) NOT NULL DEFAULT 1,
+    show_product_variants   TINYINT(1) NOT NULL DEFAULT 1,
+    show_quantities         TINYINT(1) NOT NULL DEFAULT 1,
+    created_date            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_date            TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS email_log (
+    id                   INT AUTO_INCREMENT PRIMARY KEY,
+    quote_id             INT NOT NULL,
+    template_key         VARCHAR(100) NOT NULL,
+    recipient            VARCHAR(255) NOT NULL,
+    status               ENUM('pending','sent','failed','skipped') NOT NULL DEFAULT 'pending',
+    provider_message_id  VARCHAR(255) NULL,
+    error_message        VARCHAR(500) NULL,
+    attempted_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    sent_at              TIMESTAMP NULL,
+    UNIQUE KEY uq_quote_template (quote_id, template_key),
+    CONSTRAINT fk_email_log_quote
+        FOREIGN KEY (quote_id) REFERENCES get_enquire_quote(id)
+        ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- ── General site settings (see migrations/003_site_settings.sql) ────────
+-- Backs the admin panel's General / Social Media / Invoice settings tabs.
+CREATE TABLE IF NOT EXISTS site_settings (
+    id                  INT PRIMARY KEY,
+    site_name           VARCHAR(150) NOT NULL DEFAULT '',
+    site_tagline        VARCHAR(255) NOT NULL DEFAULT '',
+    site_url            VARCHAR(255) NOT NULL DEFAULT '',
+    support_email       VARCHAR(255) NOT NULL DEFAULT '',
+    support_contact     VARCHAR(30)  NOT NULL DEFAULT '',
+    maintenance_mode    TINYINT(1)   NOT NULL DEFAULT 0,
+    maintenance_message VARCHAR(500) NOT NULL DEFAULT '',
+    social_facebook     VARCHAR(255) NOT NULL DEFAULT '',
+    social_instagram    VARCHAR(255) NOT NULL DEFAULT '',
+    social_twitter      VARCHAR(255) NOT NULL DEFAULT '',
+    social_whatsapp     VARCHAR(30)  NOT NULL DEFAULT '',
+    invoice_prefix      VARCHAR(20)  NOT NULL DEFAULT 'INV',
+    invoice_footer_note VARCHAR(500) NOT NULL DEFAULT '',
+    created_date        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_date        TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+INSERT IGNORE INTO site_settings (id, invoice_prefix) VALUES (1, 'INV');

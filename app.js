@@ -44,6 +44,7 @@ var newarrivalRouter = require('./routes/itemRoutes');
 var enquiryRouter = require('./routes/itemRoutes');
 var customerRouter = require('./routes/itemRoutes');
 var ordertrackRouter = require('./routes/itemRoutes');
+var settingsRouter = require('./routes/settingsRoutes');
 
 
 
@@ -121,6 +122,7 @@ app.use('/newarrival', newarrivalRouter);
 app.use('/enquiry', enquiryRouter);
 app.use('/customer', customerRouter);
 app.use('/ordertrack', ordertrackRouter);
+app.use('/settings', settingsRouter);
 
 // ================== HEALTH CHECK ==================
 app.get('/', (req, res) => {

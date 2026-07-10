@@ -1,8 +1,10 @@
 const { Validator } = require("node-input-validator");
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const db = require('../models/db.js');
 const { storageDir } = require('../helper/upload.js');
+const quoteEmailService = require('../services/quoteEmailService.js');
 
 // Best-effort delete of a previously-uploaded image by filename (as stored
 // in the DB) — used when an update replaces an image or a record carrying
@@ -970,6 +972,63 @@ exports.deleteProduct = (req, res) => {
 
 //------------------------------------------------------------------------------
 
+// Generates a quote reference like "YQ-20260711-8SNKBTVF". Uses
+// crypto.randomBytes (not Math.random) so it can't be guessed/enumerated.
+function generateReferenceNumber() {
+    const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const randomPart = crypto.randomBytes(6).toString('hex').toUpperCase().slice(0, 8);
+    return `YQ-${datePart}-${randomPart}`;
+}
+
+const PUBLIC_ASSET_BASE_URL = (process.env.PUBLIC_ASSET_BASE_URL || '').replace(/\/+$/, '');
+function buildStorageUrl(filename) {
+    if (!filename || !PUBLIC_ASSET_BASE_URL) return '';
+    return `${PUBLIC_ASSET_BASE_URL}/storage/${filename}`;
+}
+
+// Re-fetches product name/image from product_master by id rather than
+// trusting whatever the browser sent — quantity/color/variant are free-text
+// enquiry details (low risk, not re-derivable from a product row) and are
+// kept as submitted, but clamped/sanitised.
+async function resolveCartItems(itemsRaw) {
+    if (!Array.isArray(itemsRaw) || itemsRaw.length === 0) return [];
+
+    const productIds = [...new Set(
+        itemsRaw
+            .map((i) => parseInt(i.product_id, 10))
+            .filter((id) => Number.isInteger(id) && id > 0)
+    )];
+
+    let productsById = {};
+    if (productIds.length > 0) {
+        const placeholders = productIds.map(() => '?').join(',');
+        const rows = await db.mainDbForCron(
+            `SELECT id, product_name, index_image FROM product_master WHERE id IN (${placeholders})`,
+            productIds
+        );
+        productsById = Object.fromEntries(rows.map((r) => [r.id, r]));
+    }
+
+    return itemsRaw.slice(0, 100).map((raw) => {
+        const productId = parseInt(raw.product_id, 10);
+        const product = Number.isInteger(productId) ? productsById[productId] : undefined;
+
+        const quantity = Math.min(Math.max(parseInt(raw.quantity ?? raw.qty ?? 1, 10) || 1, 1), 9999);
+        const name = (product?.product_name || String(raw.product_name || 'Item')).slice(0, 255);
+        const variant = raw.variant ? String(raw.variant).slice(0, 100) : '';
+        const color = raw.color ? String(raw.color).slice(0, 100) : '';
+        const image = product?.index_image ? buildStorageUrl(product.index_image) : '';
+
+        return {
+            product_id: Number.isInteger(productId) ? productId : null,
+            product_name: name,
+            quantity,
+            variant,
+            color,
+            image,
+        };
+    });
+}
 
 exports.createEnquiryQuote = (req, res) => {
 
@@ -987,7 +1046,7 @@ exports.createEnquiryQuote = (req, res) => {
         message: 'required|string'
     });
 
-    v.check().then((matched) => {
+    v.check().then(async (matched) => {
 
         if (!matched) {
             const error_message = Object.values(v.errors)
@@ -999,6 +1058,17 @@ exports.createEnquiryQuote = (req, res) => {
                 message: error_message
             });
         }
+
+        let items;
+        try {
+            items = await resolveCartItems(reqData.items);
+        } catch (err) {
+            console.error('Failed to resolve cart items for quote enquiry:', err.message);
+            items = [];
+        }
+
+        const referenceNumber = generateReferenceNumber();
+        const itemsJson = JSON.stringify(items);
 
         const query = `
             INSERT INTO get_enquire_quote
@@ -1012,9 +1082,11 @@ exports.createEnquiryQuote = (req, res) => {
                 country,
                 phone_number,
                 message,
-                status
+                status,
+                reference_number,
+                items_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?)
         `;
 
         db.mainDb(
@@ -1028,9 +1100,11 @@ exports.createEnquiryQuote = (req, res) => {
                 reqData.email_id,
                 reqData.country,
                 reqData.phone_number,
-                reqData.message
+                reqData.message,
+                referenceNumber,
+                itemsJson
             ],
-            (err, result) => {
+            async (err, result) => {
 
                 if (err) {
                     return res.json({
@@ -1039,10 +1113,33 @@ exports.createEnquiryQuote = (req, res) => {
                     });
                 }
 
+                const quoteId = result.insertId;
+                let emailResult = { sent: false, status: 'failed' };
+                try {
+                    emailResult = await quoteEmailService.sendQuoteConfirmation({
+                        id: quoteId,
+                        first_name: reqData.first_name,
+                        last_name: reqData.last_name,
+                        email_id: reqData.email_id,
+                        phone_number: reqData.phone_number,
+                        country: reqData.country,
+                        message: reqData.message,
+                        reference_number: referenceNumber,
+                        created_date: new Date(),
+                        items,
+                    });
+                } catch (emailErr) {
+                    // The quote is already committed — a mailer-level failure here
+                    // must never roll back or invalidate it.
+                    console.error(`Unexpected error sending confirmation email for quote #${quoteId}:`, emailErr.message);
+                }
+
                 return res.json({
                     status: 1,
                     message: "Enquiry Quote submitted successfully",
-                    id: result.insertId
+                    id: quoteId,
+                    quote_reference: referenceNumber,
+                    email: emailResult
                 });
             }
         );

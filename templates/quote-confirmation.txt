@@ -1,0 +1,39 @@
+{{HEADING}}
+
+Hi {{CUSTOMER_NAME}},
+
+{{INTRO_TEXT}}
+
+Thank you for contacting us. Our team has successfully received your enquiry
+and is currently reviewing the information you provided to prepare the best
+pricing based on your requirements.
+
+QUOTE REFERENCE: {{QUOTE_REFERENCE}}
+
+WHAT HAPPENS NEXT?
+{{RESPONSE_TEXT}}
+
+Confirmation sent to: {{CUSTOMER_EMAIL}}
+Submitted on: {{SUBMITTED_DATE}} ({{COUNTRY}})
+
+YOUR DETAILS
+Name: {{CUSTOMER_NAME}}
+Email: {{CUSTOMER_EMAIL}}
+{{PHONE_LINE}}Country: {{COUNTRY}}
+
+PRODUCTS ENQUIRED
+{{PRODUCT_ROWS_TEXT}}
+{{MESSAGE_BLOCK_TEXT}}
+We appreciate your patience and thank you for choosing us. We look forward to
+assisting you!
+
+Continue shopping: {{SHOP_URL}}
+
+Best Regards,
+YoGo Team
+We're here to help!
+
+--
+{{FOOTER_TEXT}}
+support@yogoventures.com | +91 12345 67890 | www.yogoventures.com
+(c) 2026 YoGo Ventures. All rights reserved.

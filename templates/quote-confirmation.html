@@ -1,0 +1,174 @@
+<!--
+  YoGo Ventures — Quote Confirmation Email (transactional, table-based, inline CSS)
+
+  Adapted from /home/ubuntu/YogoEmailTemplate/email-template.html for email-client
+  compatibility: no external stylesheet, no <script>, table layout, inline styles,
+  logo referenced via Nodemailer CID attachment (cid:yogo-logo).
+
+  Placeholders (replaced by helper/emailTemplateEngine.js — every scalar value is
+  HTML-escaped before substitution; PRODUCT_ROWS/PHONE_ROW/MESSAGE_BLOCK are
+  pre-rendered HTML fragments built by trusted backend code):
+    {{HEADING}} {{CUSTOMER_NAME}} {{INTRO_TEXT}} {{RESPONSE_TEXT}} {{FOOTER_TEXT}}
+    {{CUSTOMER_EMAIL}} {{QUOTE_REFERENCE}} {{SUBMITTED_DATE}} {{COUNTRY}}
+    {{PHONE_ROW}} {{MESSAGE_BLOCK}} {{PRODUCT_ROWS}} {{SHOP_URL}}
+-->
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<title>Enquiry Confirmation – YoGo Ventures</title>
+</head>
+<body style="margin:0; padding:0; background-color:#e5e5e5; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#e5e5e5;">
+  <tr>
+    <td align="center" style="padding:28px 16px 40px;">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px; width:100%; background-color:#ffffff; border-radius:4px; overflow:hidden;">
+
+        <!-- Header -->
+        <tr>
+          <td align="center" style="background-color:#1a1a1a; padding:36px 40px 32px;">
+            <img src="cid:yogo-logo" alt="YoGo Ventures" width="150" style="display:block; height:auto; max-width:150px; border:0;" />
+          </td>
+        </tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="padding:44px 44px 36px;">
+
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="padding-bottom:22px;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td align="center" width="80" height="80" style="width:80px; height:80px; border-radius:50%; background-color:#f5f5f0; border:1.5px solid #e8e8e0; font-size:34px; line-height:80px; color:#2c2c2c;">&#9993;</td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="font-size:22px; font-weight:800; color:#1a1a1a; line-height:1.3; padding-bottom:12px;">
+                  {{HEADING}}
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="padding-bottom:16px;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td style="width:44px; height:3px; background-color:#c9a84c; border-radius:2px; font-size:0; line-height:0;">&nbsp;</td></tr></table>
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="font-size:14px; line-height:1.7; color:#4a4a4a; padding-bottom:8px;">
+                  {{INTRO_TEXT}}
+                </td>
+              </tr>
+            </table>
+
+            <p style="font-size:15px; font-weight:700; color:#1a1a1a; margin:24px 0 12px;">Hi {{CUSTOMER_NAME}},</p>
+
+            <p style="font-size:13.5px; line-height:1.8; color:#4a4a4a; margin:0 0 20px;">
+              Thank you for contacting us. Our team has successfully received your enquiry and is currently reviewing the information you provided to prepare the best pricing based on your requirements.
+            </p>
+
+            <!-- Quote reference badge -->
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:20px;">
+              <tr>
+                <td align="center" style="background-color:#fdfdf9; border:1.5px solid #e8e8e0; border-radius:10px; padding:16px;">
+                  <span style="font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#8a8a8a;">Quote Reference</span><br />
+                  <span style="font-size:19px; font-weight:800; color:#1a1a1a; letter-spacing:0.02em;">{{QUOTE_REFERENCE}}</span>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Info rows -->
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1.5px solid #e8e8e0; border-radius:10px; margin-bottom:24px;">
+              <tr>
+                <td style="padding:16px 18px; border-bottom:1px solid #e8e8e0;">
+                  <p style="margin:0 0 3px; font-size:13px; font-weight:700; color:#1a1a1a;">What Happens Next?</p>
+                  <p style="margin:0; font-size:12.5px; color:#555;">{{RESPONSE_TEXT}}</p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:16px 18px; border-bottom:1px solid #e8e8e0;">
+                  <p style="margin:0 0 3px; font-size:13px; font-weight:700; color:#1a1a1a;">Confirmation Sent To</p>
+                  <p style="margin:0; font-size:13px; font-weight:600; color:#c9a84c;">{{CUSTOMER_EMAIL}}</p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:16px 18px;">
+                  <p style="margin:0 0 3px; font-size:13px; font-weight:700; color:#1a1a1a;">Submitted On</p>
+                  <p style="margin:0; font-size:12.5px; color:#555;">{{SUBMITTED_DATE}} &middot; {{COUNTRY}}</p>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Customer details -->
+            <p style="font-size:12px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#8a8a8a; margin:0 0 8px;">Your Details</p>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#fdfdf9; border:1.5px solid #e8e8e0; border-radius:10px; margin-bottom:24px;">
+              <tr>
+                <td style="padding:14px 18px; font-size:13px; color:#4a4a4a;">
+                  <strong style="color:#1a1a1a;">Name:</strong> {{CUSTOMER_NAME}}<br />
+                  <strong style="color:#1a1a1a;">Email:</strong> {{CUSTOMER_EMAIL}}<br />
+                  {{PHONE_ROW}}<strong style="color:#1a1a1a;">Country:</strong> {{COUNTRY}}
+                </td>
+              </tr>
+            </table>
+
+            <!-- Products -->
+            <p style="font-size:12px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#8a8a8a; margin:0 0 8px;">Products Enquired</p>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1.5px solid #e8e8e0; border-radius:10px; margin-bottom:24px; border-collapse:separate;">
+              <tr style="background-color:#f8f8f5;">
+                <td style="padding:10px 14px; font-size:11px; font-weight:700; text-transform:uppercase; color:#8a8a8a; border-bottom:1.5px solid #e8e8e0;">Product</td>
+                <td style="padding:10px 14px; font-size:11px; font-weight:700; text-transform:uppercase; color:#8a8a8a; border-bottom:1.5px solid #e8e8e0;" align="right">Qty</td>
+              </tr>
+              {{PRODUCT_ROWS}}
+            </table>
+
+            {{MESSAGE_BLOCK}}
+
+            <p style="font-size:13.5px; line-height:1.8; color:#4a4a4a; margin:0 0 8px;">
+              We appreciate your patience and thank you for choosing us.<br/>We look forward to assisting you!
+            </p>
+
+            <!-- CTA -->
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0 8px;">
+              <tr>
+                <td align="center">
+                  <a href="{{SHOP_URL}}" style="display:inline-block; background-color:#c9a84c; color:#1a1a1a; font-weight:700; font-size:13.5px; text-decoration:none; padding:13px 32px; border-radius:6px;">Continue Shopping</a>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Signature -->
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #f0f0f0; margin-top:24px; padding-top:16px;">
+              <tr>
+                <td style="padding-top:16px;">
+                  <p style="margin:0; font-size:12px; color:#999;">Best Regards,</p>
+                  <p style="margin:2px 0 0; font-size:14.5px; font-weight:700; color:#1a1a1a;">YoGo Team</p>
+                  <p style="margin:2px 0 0; font-size:12px; color:#aaa;">We're here to help!</p>
+                </td>
+              </tr>
+            </table>
+
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td align="center" style="background-color:#f8f8f8; border-top:1px solid #eee; padding:24px 40px 28px;">
+            <p style="margin:0 0 14px; font-size:12px; color:#555;">
+              support@yogoventures.com &nbsp;·&nbsp; +91 12345 67890 &nbsp;·&nbsp; www.yogoventures.com
+            </p>
+            <p style="margin:0; font-size:11px; color:#999; line-height:1.6;">
+              {{FOOTER_TEXT}}<br />
+              &copy; 2026 YoGo Ventures. All rights reserved.
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>

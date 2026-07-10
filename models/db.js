@@ -6,6 +6,11 @@ const pool = mysql.createPool({
     user: process.env.DB_USER || "root",
     password: process.env.DB_PASSWORD || "",
     database: process.env.DB_NAME || "yogoventures",
+    // Table columns are utf8mb4 — without this the driver defaults to a
+    // 3-byte utf8 connection charset, which corrupts any 4-byte character
+    // (emoji) and mis-encodes other multi-byte characters (accents, en/em
+    // dashes) on write.
+    charset: "utf8mb4",
     connectionLimit: 50,
     // Stacked queries aren't needed by any live query and only widen the
     // blast radius of a future SQL-injection bug — keep this off.
