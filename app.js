@@ -45,7 +45,7 @@ var enquiryRouter = require('./routes/itemRoutes');
 var customerRouter = require('./routes/itemRoutes');
 var ordertrackRouter = require('./routes/itemRoutes');
 var settingsRouter = require('./routes/settingsRoutes');
-
+var sampleRouter = require('./routes/itemRoutes');
 
 
 var app = express();
@@ -123,6 +123,7 @@ app.use('/enquiry', enquiryRouter);
 app.use('/customer', customerRouter);
 app.use('/ordertrack', ordertrackRouter);
 app.use('/settings', settingsRouter);
+app.use('/sample', sampleRouter);
 
 // ================== HEALTH CHECK ==================
 app.get('/', (req, res) => {

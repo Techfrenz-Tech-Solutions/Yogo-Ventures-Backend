@@ -2722,6 +2722,285 @@ exports.deleteOrderTracking = (req, res) => {
 //-------------------------------------------------------------------
 
 
+exports.createSampleEnquiry = (req, res) => {
+
+    const reqData = req.body;
+
+    const v = new Validator(reqData, {
+        enquiry_id: 'required|integer',
+        customer_id: 'required|integer',
+        enquired_on: 'required|date',
+        product_name: 'required|string|maxLength:255',
+        quantity: 'required|integer',
+        responded: 'required|string',
+        sample_ordered: 'required|string',
+        sample_shipped: 'required|string',
+        order_placed: 'required|string'
+    });
+
+    v.check().then((matched) => {
+
+        if (!matched) {
+
+            const error_message = Object.values(v.errors)
+                .map(e => e.message)
+                .join(", ");
+
+            return res.json({
+                status: 0,
+                message: error_message
+            });
+
+        }
+
+        const query = `
+            INSERT INTO sample_enquiry
+            (
+                enquiry_id,
+                customer_id,
+                enquired_on,
+                product_name,
+                quantity,
+                responded,
+                sample_ordered,
+                sample_shipped,
+                order_placed
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+
+        db.mainDb(
+            query,
+            [
+                reqData.enquiry_id,
+                reqData.customer_id,
+                reqData.enquired_on,
+                reqData.product_name,
+                reqData.quantity,
+                reqData.responded,
+                reqData.sample_ordered,
+                reqData.sample_shipped,
+                reqData.order_placed
+            ],
+            (err, result) => {
+
+                if (err) {
+                    return res.json({
+                        status: 0,
+                        message: "DB error"
+                    });
+                }
+
+                return res.json({
+                    status: 1,
+                    message: "Sample enquiry created successfully"
+                });
+
+            }
+        );
+
+    });
+
+};
+
+
+
+
+
+
+exports.getSampleEnquiries = (req, res) => {
+
+    db.mainDb(
+        `SELECT * FROM sample_enquiry ORDER BY enquiry_id DESC`,
+        [],
+        (err, result) => {
+
+            if (err) {
+                return res.json({
+                    status: 0,
+                    message: "DB error"
+                });
+            }
+
+            return res.json({
+                status: 1,
+                data: result
+            });
+
+        }
+    );
+
+};
+
+
+
+exports.getSampleEnquiry = (req, res) => {
+
+    const id = req.params.id;
+
+    db.mainDb(
+        `SELECT * FROM sample_enquiry WHERE enquiry_id=?`,
+        [id],
+        (err, result) => {
+
+            if (err) {
+                return res.json({
+                    status: 0,
+                    message: "DB error"
+                });
+            }
+
+            if (result.length == 0) {
+
+                return res.json({
+                    status: 0,
+                    message: "Sample enquiry not found"
+                });
+
+            }
+
+            return res.json({
+                status: 1,
+                data: result[0]
+            });
+
+        }
+    );
+
+};
+
+
+
+
+exports.updateSampleEnquiry = (req, res) => {
+
+    const reqData = req.body;
+
+    const v = new Validator(reqData, {
+        enquiry_id: 'required|integer',
+        customer_id: 'required|integer',
+        enquired_on: 'required|date',
+        product_name: 'required|string|maxLength:255',
+        quantity: 'required|integer',
+        responded: 'required|string',
+        sample_ordered: 'required|string',
+        sample_shipped: 'required|string',
+        order_placed: 'required|string'
+    });
+
+    v.check().then((matched) => {
+
+        if (!matched) {
+
+            const error_message = Object.values(v.errors)
+                .map(e => e.message)
+                .join(", ");
+
+            return res.json({
+                status: 0,
+                message: error_message
+            });
+
+        }
+
+        const query = `
+            UPDATE sample_enquiry
+            SET
+                customer_id=?,
+                enquired_on=?,
+                product_name=?,
+                quantity=?,
+                responded=?,
+                sample_ordered=?,
+                sample_shipped=?,
+                order_placed=?
+            WHERE enquiry_id=?
+        `;
+
+        db.mainDb(
+            query,
+            [
+                reqData.customer_id,
+                reqData.enquired_on,
+                reqData.product_name,
+                reqData.quantity,
+                reqData.responded,
+                reqData.sample_ordered,
+                reqData.sample_shipped,
+                reqData.order_placed,
+                reqData.enquiry_id
+            ],
+            (err, result) => {
+
+                if (err) {
+
+                    return res.json({
+                        status: 0,
+                        message: "DB error"
+                    });
+
+                }
+
+                if (result.affectedRows == 0) {
+
+                    return res.json({
+                        status: 0,
+                        message: "Sample enquiry not found"
+                    });
+
+                }
+
+                return res.json({
+                    status: 1,
+                    message: "Sample enquiry updated successfully"
+                });
+
+            }
+        );
+
+    });
+
+};
+
+
+exports.deleteSampleEnquiry = (req, res) => {
+
+    const id = req.body.enquiry_id;
+
+    db.mainDb(
+        `DELETE FROM sample_enquiry WHERE enquiry_id=?`,
+        [id],
+        (err, result) => {
+
+            if (err) {
+
+                return res.json({
+                    status: 0,
+                    message: "DB error"
+                });
+
+            }
+
+            if (result.affectedRows == 0) {
+
+                return res.json({
+                    status: 0,
+                    message: "Sample enquiry not found"
+                });
+
+            }
+
+            return res.json({
+                status: 1,
+                message: "Sample enquiry deleted successfully"
+            });
+
+        }
+    );
+
+};
+
+
 
 
 

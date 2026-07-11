@@ -116,4 +116,15 @@ router.post('/order-trackingupdate', auth, itemController.updateOrderTracking);
 router.post('/order-trackingdelete', auth, itemController.deleteOrderTracking);
 
 
+router.post('/sample-enquirycreate', auth, itemController.createSampleEnquiry);
+
+router.get('/sample-enquirylist', itemController.getSampleEnquiries);
+
+router.get('/sample-enquiry/:id', auth, itemController.getSampleEnquiry);
+
+router.post('/sample-enquiryupdate', auth, itemController.updateSampleEnquiry);
+
+router.post('/sample-enquirydelete', auth, itemController.deleteSampleEnquiry);
+
+
 module.exports = router;
