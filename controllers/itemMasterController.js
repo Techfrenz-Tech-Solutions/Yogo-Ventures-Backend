@@ -972,12 +972,13 @@ exports.deleteProduct = (req, res) => {
 
 //------------------------------------------------------------------------------
 
-// Generates a quote reference like "YQ-20260711-8SNKBTVF". Uses
-// crypto.randomBytes (not Math.random) so it can't be guessed/enumerated.
-function generateReferenceNumber() {
+// Generates a customer-facing reference like "YQ-20260711-8SNKBTVF" (or
+// "CR-..." for contact enquiries). Uses crypto.randomBytes (not Math.random)
+// so it can't be guessed/enumerated.
+function generateReferenceNumber(prefix = 'YQ') {
     const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const randomPart = crypto.randomBytes(6).toString('hex').toUpperCase().slice(0, 8);
-    return `YQ-${datePart}-${randomPart}`;
+    return `${prefix}-${datePart}-${randomPart}`;
 }
 
 const PUBLIC_ASSET_BASE_URL = (process.env.PUBLIC_ASSET_BASE_URL || '').replace(/\/+$/, '');
@@ -1324,6 +1325,8 @@ exports.createContactUs = (req, res) => {
             });
         }
 
+        const referenceNumber = generateReferenceNumber('CR');
+
         const query = `
             INSERT INTO contact_us_enquiry
             (
@@ -1334,9 +1337,10 @@ exports.createContactUs = (req, res) => {
                 phone_number,
                 subject,
                 message,
-                status
+                status,
+                reference_number
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending')
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending', ?)
         `;
 
         db.mainDb(
@@ -1348,7 +1352,8 @@ exports.createContactUs = (req, res) => {
                 reqData.country,
                 reqData.phone_number,
                 reqData.subject,
-                reqData.message
+                reqData.message,
+                referenceNumber
             ],
             (err, result) => {
 
@@ -1362,7 +1367,8 @@ exports.createContactUs = (req, res) => {
                 return res.json({
                     status: 1,
                     message: "Contact enquiry submitted successfully",
-                    id: result.insertId
+                    id: result.insertId,
+                    contact_reference: referenceNumber
                 });
             }
         );
@@ -2031,6 +2037,8 @@ exports.createEnquiry = (req, res) => {
             });
         }
 
+        const referenceNumber = generateReferenceNumber('ENQ');
+
         const query = `
             INSERT INTO enquiries
             (
@@ -2041,9 +2049,10 @@ exports.createEnquiry = (req, res) => {
                 phone_number,
                 product_category,
                 message,
-                status
+                status,
+                reference_number
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending')
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending', ?)
         `;
 
         db.mainDb(
@@ -2055,7 +2064,8 @@ exports.createEnquiry = (req, res) => {
                 reqData.country,
                 reqData.phone_number,
                 reqData.product_category,
-                reqData.message
+                reqData.message,
+                referenceNumber
             ],
             (err, result) => {
 
@@ -2069,7 +2079,8 @@ exports.createEnquiry = (req, res) => {
                 return res.json({
                     status: 1,
                     message: "Enquiry submitted successfully",
-                    id: result.insertId
+                    id: result.insertId,
+                    enquiry_reference: referenceNumber
                 });
             }
         );
@@ -2720,6 +2731,285 @@ exports.deleteOrderTracking = (req, res) => {
 };
 
 //-------------------------------------------------------------------
+
+
+exports.createSampleEnquiry = (req, res) => {
+
+    const reqData = req.body;
+
+    const v = new Validator(reqData, {
+        enquiry_id: 'required|integer',
+        customer_id: 'required|integer',
+        enquired_on: 'required|date',
+        product_name: 'required|string|maxLength:255',
+        quantity: 'required|integer',
+        responded: 'required|string',
+        sample_ordered: 'required|string',
+        sample_shipped: 'required|string',
+        order_placed: 'required|string'
+    });
+
+    v.check().then((matched) => {
+
+        if (!matched) {
+
+            const error_message = Object.values(v.errors)
+                .map(e => e.message)
+                .join(", ");
+
+            return res.json({
+                status: 0,
+                message: error_message
+            });
+
+        }
+
+        const query = `
+            INSERT INTO sample_enquiry
+            (
+                enquiry_id,
+                customer_id,
+                enquired_on,
+                product_name,
+                quantity,
+                responded,
+                sample_ordered,
+                sample_shipped,
+                order_placed
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+
+        db.mainDb(
+            query,
+            [
+                reqData.enquiry_id,
+                reqData.customer_id,
+                reqData.enquired_on,
+                reqData.product_name,
+                reqData.quantity,
+                reqData.responded,
+                reqData.sample_ordered,
+                reqData.sample_shipped,
+                reqData.order_placed
+            ],
+            (err, result) => {
+
+                if (err) {
+                    return res.json({
+                        status: 0,
+                        message: "DB error"
+                    });
+                }
+
+                return res.json({
+                    status: 1,
+                    message: "Sample enquiry created successfully"
+                });
+
+            }
+        );
+
+    });
+
+};
+
+
+
+
+
+
+exports.getSampleEnquiries = (req, res) => {
+
+    db.mainDb(
+        `SELECT * FROM sample_enquiry ORDER BY enquiry_id DESC`,
+        [],
+        (err, result) => {
+
+            if (err) {
+                return res.json({
+                    status: 0,
+                    message: "DB error"
+                });
+            }
+
+            return res.json({
+                status: 1,
+                data: result
+            });
+
+        }
+    );
+
+};
+
+
+
+exports.getSampleEnquiry = (req, res) => {
+
+    const id = req.params.id;
+
+    db.mainDb(
+        `SELECT * FROM sample_enquiry WHERE enquiry_id=?`,
+        [id],
+        (err, result) => {
+
+            if (err) {
+                return res.json({
+                    status: 0,
+                    message: "DB error"
+                });
+            }
+
+            if (result.length == 0) {
+
+                return res.json({
+                    status: 0,
+                    message: "Sample enquiry not found"
+                });
+
+            }
+
+            return res.json({
+                status: 1,
+                data: result[0]
+            });
+
+        }
+    );
+
+};
+
+
+
+
+exports.updateSampleEnquiry = (req, res) => {
+
+    const reqData = req.body;
+
+    const v = new Validator(reqData, {
+        enquiry_id: 'required|integer',
+        customer_id: 'required|integer',
+        enquired_on: 'required|date',
+        product_name: 'required|string|maxLength:255',
+        quantity: 'required|integer',
+        responded: 'required|string',
+        sample_ordered: 'required|string',
+        sample_shipped: 'required|string',
+        order_placed: 'required|string'
+    });
+
+    v.check().then((matched) => {
+
+        if (!matched) {
+
+            const error_message = Object.values(v.errors)
+                .map(e => e.message)
+                .join(", ");
+
+            return res.json({
+                status: 0,
+                message: error_message
+            });
+
+        }
+
+        const query = `
+            UPDATE sample_enquiry
+            SET
+                customer_id=?,
+                enquired_on=?,
+                product_name=?,
+                quantity=?,
+                responded=?,
+                sample_ordered=?,
+                sample_shipped=?,
+                order_placed=?
+            WHERE enquiry_id=?
+        `;
+
+        db.mainDb(
+            query,
+            [
+                reqData.customer_id,
+                reqData.enquired_on,
+                reqData.product_name,
+                reqData.quantity,
+                reqData.responded,
+                reqData.sample_ordered,
+                reqData.sample_shipped,
+                reqData.order_placed,
+                reqData.enquiry_id
+            ],
+            (err, result) => {
+
+                if (err) {
+
+                    return res.json({
+                        status: 0,
+                        message: "DB error"
+                    });
+
+                }
+
+                if (result.affectedRows == 0) {
+
+                    return res.json({
+                        status: 0,
+                        message: "Sample enquiry not found"
+                    });
+
+                }
+
+                return res.json({
+                    status: 1,
+                    message: "Sample enquiry updated successfully"
+                });
+
+            }
+        );
+
+    });
+
+};
+
+
+exports.deleteSampleEnquiry = (req, res) => {
+
+    const id = req.body.enquiry_id;
+
+    db.mainDb(
+        `DELETE FROM sample_enquiry WHERE enquiry_id=?`,
+        [id],
+        (err, result) => {
+
+            if (err) {
+
+                return res.json({
+                    status: 0,
+                    message: "DB error"
+                });
+
+            }
+
+            if (result.affectedRows == 0) {
+
+                return res.json({
+                    status: 0,
+                    message: "Sample enquiry not found"
+                });
+
+            }
+
+            return res.json({
+                status: 1,
+                message: "Sample enquiry deleted successfully"
+            });
+
+        }
+    );
+
+};
 
 
 

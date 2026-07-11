@@ -199,6 +199,30 @@ PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
+-- ── Contact enquiry customer-facing reference (see migrations/003_contact_request_id.sql) ──
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'contact_us_enquiry' AND column_name = 'reference_number'
+);
+SET @sql := IF(@col_exists = 0,
+    'ALTER TABLE contact_us_enquiry ADD COLUMN reference_number VARCHAR(30) NULL UNIQUE',
+    'SELECT 1');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- ── General enquiry customer-facing reference (see migrations/004_enquiry_id.sql) ──
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'enquiries' AND column_name = 'reference_number'
+);
+SET @sql := IF(@col_exists = 0,
+    'ALTER TABLE enquiries ADD COLUMN reference_number VARCHAR(30) NULL UNIQUE',
+    'SELECT 1');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
 CREATE TABLE IF NOT EXISTS email_templates (
     id                      INT AUTO_INCREMENT PRIMARY KEY,
     template_key            VARCHAR(100) NOT NULL UNIQUE,
