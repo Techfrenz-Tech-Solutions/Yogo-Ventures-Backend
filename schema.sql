@@ -283,3 +283,16 @@ CREATE TABLE IF NOT EXISTS site_settings (
     updated_date        TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 INSERT IGNORE INTO site_settings (id, invoice_prefix) VALUES (1, 'INV');
+
+-- ── Activity log (see migrations/005_activity_log.sql) ───────────────────
+-- Backs the admin panel's real (non-mocked) notification feed. Most
+-- notification types are reconstructed from existing tables' own
+-- created_date/updated_date; this table only records events that can't be
+-- reconstructed after the fact, such as deletions.
+CREATE TABLE IF NOT EXISTS activity_log (
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    action_type   VARCHAR(50) NOT NULL,
+    description   VARCHAR(500) NOT NULL,
+    reference_id  VARCHAR(100) NULL,
+    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

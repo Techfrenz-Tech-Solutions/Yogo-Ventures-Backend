@@ -18,6 +18,20 @@ function deleteStorageFile(filename) {
     });
 }
 
+// Best-effort record of an admin action into activity_log — used only for
+// actions that can't be reconstructed from other tables afterward (e.g.
+// deletions, where the row itself is gone). Never throws / never blocks the
+// caller's response; a failed log write shouldn't fail the underlying action.
+function logActivity(actionType, description, referenceId) {
+    db.mainDb(
+        `INSERT INTO activity_log (action_type, description, reference_id) VALUES (?, ?, ?)`,
+        [actionType, description, referenceId != null ? String(referenceId) : null],
+        (err) => {
+            if (err) console.error('Failed to write activity_log entry:', actionType, err.message);
+        }
+    );
+}
+
 // Create Enquiry
 exports.createCountry = (req, res) => {
     const reqData = req.body;
@@ -929,7 +943,7 @@ exports.deleteProduct = (req, res) => {
     const id = req.body.id;
 
     db.mainDb(
-        `SELECT index_image, image1, image2, image3, image4, image5 FROM product_master WHERE id = ?`,
+        `SELECT product_code, product_name, index_image, image1, image2, image3, image4, image5 FROM product_master WHERE id = ?`,
         [id],
         (selectErr, existingRows) => {
             if (selectErr) {
@@ -958,6 +972,12 @@ exports.deleteProduct = (req, res) => {
                     if (existingRows.length > 0) {
                         ['index_image', 'image1', 'image2', 'image3', 'image4', 'image5']
                             .forEach((field) => deleteStorageFile(existingRows[0][field]));
+
+                        logActivity(
+                            'product_deleted',
+                            `Product deleted — ${existingRows[0].product_name}`,
+                            existingRows[0].product_code
+                        );
                     }
 
                     return res.json({
@@ -2704,28 +2724,46 @@ exports.deleteOrderTracking = (req, res) => {
     const id = req.body.id;
 
     db.mainDb(
-        `DELETE FROM order_tracking WHERE id = ?`,
+        `SELECT order_id, product_name FROM order_tracking WHERE id = ?`,
         [id],
-        (err, result) => {
-
-            if (err) {
-                return res.json({
-                    status: 0,
-                    message: "DB error"
-                });
+        (selectErr, existingRows) => {
+            if (selectErr) {
+                return res.json({ status: 0, message: "DB error" });
             }
 
-            if (result.affectedRows === 0) {
-                return res.json({
-                    status: 0,
-                    message: "Order Tracking not found"
-                });
-            }
+            db.mainDb(
+                `DELETE FROM order_tracking WHERE id = ?`,
+                [id],
+                (err, result) => {
 
-            return res.json({
-                status: 1,
-                message: "Order Tracking deleted successfully"
-            });
+                    if (err) {
+                        return res.json({
+                            status: 0,
+                            message: "DB error"
+                        });
+                    }
+
+                    if (result.affectedRows === 0) {
+                        return res.json({
+                            status: 0,
+                            message: "Order Tracking not found"
+                        });
+                    }
+
+                    if (existingRows.length > 0) {
+                        logActivity(
+                            'order_deleted',
+                            `Order deleted — ${existingRows[0].product_name}`,
+                            existingRows[0].order_id
+                        );
+                    }
+
+                    return res.json({
+                        status: 1,
+                        message: "Order Tracking deleted successfully"
+                    });
+                }
+            );
         }
     );
 };
@@ -3011,6 +3049,231 @@ exports.deleteSampleEnquiry = (req, res) => {
 
 };
 
+//-------------------------------------------------------------------
+
+// Real (non-mocked) admin notification feed. Combines recent creates/
+// updates read directly from each table's own timestamp columns with
+// deletion events recorded in activity_log (see logActivity above), since
+// deleted rows can't be reconstructed after the fact. Each UNION branch is
+// independently capped at 20 rows before the final sort + limit so one
+// noisy table can't starve the others out of a 20-row page.
+// Table collations differ (older tables are utf8mb4_general_ci, newer ones
+// default to the server's utf8mb4_0900_ai_ci) — UNION refuses to combine
+// text columns of different collations, so every text column is coerced to
+// a single common collation explicitly.
+const RECENT_ACTIVITY_QUERY = `
+    (
+        SELECT CONVERT('quote_created' USING utf8mb4) COLLATE utf8mb4_general_ci AS action_type,
+               CONVERT(CONCAT('New quote enquiry from ', first_name, ' ', last_name, ' \u2014 ', product_name) USING utf8mb4) COLLATE utf8mb4_general_ci AS description,
+               CONVERT(COALESCE(reference_number, CONCAT('#', id)) USING utf8mb4) COLLATE utf8mb4_general_ci AS reference_id,
+               created_date AS activity_time
+        FROM get_enquire_quote
+        ORDER BY created_date DESC LIMIT 20
+    )
+    UNION ALL
+    (
+        SELECT CONVERT('contact_created' USING utf8mb4) COLLATE utf8mb4_general_ci,
+               CONVERT(CONCAT('New contact enquiry from ', first_name, ' ', last_name, ' \u2014 ', subject) USING utf8mb4) COLLATE utf8mb4_general_ci,
+               CONVERT(COALESCE(reference_number, CONCAT('#', id)) USING utf8mb4) COLLATE utf8mb4_general_ci,
+               created_date
+        FROM contact_us_enquiry
+        ORDER BY created_date DESC LIMIT 20
+    )
+    UNION ALL
+    (
+        SELECT CONVERT('enquiry_created' USING utf8mb4) COLLATE utf8mb4_general_ci,
+               CONVERT(CONCAT('New general enquiry from ', first_name, ' ', last_name, ' \u2014 ', product_category) USING utf8mb4) COLLATE utf8mb4_general_ci,
+               CONVERT(COALESCE(reference_number, CONCAT('#', id)) USING utf8mb4) COLLATE utf8mb4_general_ci,
+               created_date
+        FROM enquiries
+        ORDER BY created_date DESC LIMIT 20
+    )
+    UNION ALL
+    (
+        SELECT CONVERT('sample_enquiry_created' USING utf8mb4) COLLATE utf8mb4_general_ci,
+               CONVERT(CONCAT('New sample enquiry \u2014 ', product_name, ' (qty ', quantity, ')') USING utf8mb4) COLLATE utf8mb4_general_ci,
+               CONVERT(CONCAT('#', enquiry_id) USING utf8mb4) COLLATE utf8mb4_general_ci,
+               created_at
+        FROM sample_enquiry
+        ORDER BY created_at DESC LIMIT 20
+    )
+    UNION ALL
+    (
+        SELECT CONVERT('order_created' USING utf8mb4) COLLATE utf8mb4_general_ci,
+               CONVERT(CONCAT('New order placed \u2014 ', product_name) USING utf8mb4) COLLATE utf8mb4_general_ci,
+               CONVERT(order_id USING utf8mb4) COLLATE utf8mb4_general_ci,
+               created_date
+        FROM order_tracking
+        ORDER BY created_date DESC LIMIT 20
+    )
+    UNION ALL
+    (
+        SELECT CONVERT('product_created' USING utf8mb4) COLLATE utf8mb4_general_ci,
+               CONVERT(CONCAT('Product added \u2014 ', product_name) USING utf8mb4) COLLATE utf8mb4_general_ci,
+               CONVERT(product_code USING utf8mb4) COLLATE utf8mb4_general_ci,
+               created_date
+        FROM product_master
+        ORDER BY created_date DESC LIMIT 20
+    )
+    UNION ALL
+    (
+        SELECT CONVERT('product_updated' USING utf8mb4) COLLATE utf8mb4_general_ci,
+               CONVERT(CONCAT('Product updated \u2014 ', product_name) USING utf8mb4) COLLATE utf8mb4_general_ci,
+               CONVERT(product_code USING utf8mb4) COLLATE utf8mb4_general_ci,
+               updated_date
+        FROM product_master
+        WHERE updated_date > created_date
+        ORDER BY updated_date DESC LIMIT 20
+    )
+    UNION ALL
+    (
+        SELECT CONVERT('customer_created' USING utf8mb4) COLLATE utf8mb4_general_ci,
+               CONVERT(CONCAT('New customer added \u2014 ', customer_name) USING utf8mb4) COLLATE utf8mb4_general_ci,
+               CONVERT(CONCAT('#', id) USING utf8mb4) COLLATE utf8mb4_general_ci,
+               created_date
+        FROM customer_master
+        ORDER BY created_date DESC LIMIT 20
+    )
+    UNION ALL
+    (
+        SELECT CONVERT(action_type USING utf8mb4) COLLATE utf8mb4_general_ci,
+               CONVERT(description USING utf8mb4) COLLATE utf8mb4_general_ci,
+               CONVERT(reference_id USING utf8mb4) COLLATE utf8mb4_general_ci,
+               created_at
+        FROM activity_log
+        ORDER BY created_at DESC LIMIT 20
+    )
+    ORDER BY activity_time DESC
+    LIMIT 20
+`;
+
+exports.getRecentActivity = (req, res) => {
+
+    db.mainDb(
+        RECENT_ACTIVITY_QUERY,
+        [],
+        (err, result) => {
+
+            if (err) {
+                return res.json({
+                    status: 0,
+                    message: "DB error"
+                });
+            }
+
+            return res.json({
+                status: 1,
+                data: result
+            });
+        }
+    );
+
+};
+
+//-------------------------------------------------------------------
+// Dashboard — real (non-mocked) stats, monthly graph data and enquiry
+// previews. sample_enquiry has no status column (only per-step Yes/No
+// flags), so it's counted toward the Total but deliberately excluded from
+// Pending/Completed — it doesn't share the Pending / Mark as Done workflow
+// the other three enquiry tables use, and guessing a mapping would
+// misclassify its records.
+//-------------------------------------------------------------------
+
+function dbQueryAsync(query, values = []) {
+    return new Promise((resolve, reject) => {
+        db.mainDb(query, values, (err, result) => {
+            if (err) reject(err); else resolve(result);
+        });
+    });
+}
+
+exports.getDashboardStats = async (req, res) => {
+    try {
+        const [row] = await dbQueryAsync(`
+            SELECT
+                (SELECT COUNT(*) FROM get_enquire_quote) +
+                (SELECT COUNT(*) FROM contact_us_enquiry) +
+                (SELECT COUNT(*) FROM enquiries) +
+                (SELECT COUNT(*) FROM sample_enquiry) AS total,
+
+                (SELECT COUNT(*) FROM get_enquire_quote  WHERE status = 'Pending') +
+                (SELECT COUNT(*) FROM contact_us_enquiry WHERE status = 'Pending') +
+                (SELECT COUNT(*) FROM enquiries          WHERE status = 'Pending') AS pending,
+
+                (SELECT COUNT(*) FROM get_enquire_quote  WHERE status = 'Mark as Done') +
+                (SELECT COUNT(*) FROM contact_us_enquiry WHERE status = 'Mark as Done') +
+                (SELECT COUNT(*) FROM enquiries          WHERE status = 'Mark as Done') AS completed
+        `);
+
+        return res.json({
+            status: 1,
+            data: {
+                total:     Number(row.total)     || 0,
+                pending:   Number(row.pending)   || 0,
+                completed: Number(row.completed) || 0,
+            }
+        });
+    } catch (err) {
+        return res.json({ status: 0, message: "DB error" });
+    }
+};
+
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONTHLY_LOOKBACK = 6;
+
+exports.getMonthlyEnquiries = async (req, res) => {
+    try {
+        const now = new Date();
+        const months = [];
+        for (let i = MONTHLY_LOOKBACK - 1; i >= 0; i--) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            months.push({
+                key:   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+                label: `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`,
+            });
+        }
+        const startDate = `${months[0].key}-01`;
+
+        const [quoteRows, contactRows, generalRows, sampleRows] = await Promise.all([
+            dbQueryAsync(`SELECT DATE_FORMAT(created_date, '%Y-%m') AS ym, COUNT(*) AS cnt FROM get_enquire_quote  WHERE created_date >= ? GROUP BY ym`, [startDate]),
+            dbQueryAsync(`SELECT DATE_FORMAT(created_date, '%Y-%m') AS ym, COUNT(*) AS cnt FROM contact_us_enquiry WHERE created_date >= ? GROUP BY ym`, [startDate]),
+            dbQueryAsync(`SELECT DATE_FORMAT(created_date, '%Y-%m') AS ym, COUNT(*) AS cnt FROM enquiries          WHERE created_date >= ? GROUP BY ym`, [startDate]),
+            dbQueryAsync(`SELECT DATE_FORMAT(created_at,  '%Y-%m') AS ym, COUNT(*) AS cnt FROM sample_enquiry     WHERE created_at  >= ? GROUP BY ym`, [startDate]),
+        ]);
+
+        const toMap = (rows) => rows.reduce((acc, r) => { acc[r.ym] = Number(r.cnt); return acc; }, {});
+        const quoteMap = toMap(quoteRows), contactMap = toMap(contactRows), generalMap = toMap(generalRows), sampleMap = toMap(sampleRows);
+
+        const data = months.map(m => ({
+            month:   m.label,
+            general: generalMap[m.key] || 0,
+            contact: contactMap[m.key] || 0,
+            quote:   quoteMap[m.key]   || 0,
+            sample:  sampleMap[m.key]  || 0,
+        }));
+
+        return res.json({ status: 1, data });
+    } catch (err) {
+        return res.json({ status: 0, message: "DB error" });
+    }
+};
+
+exports.getLatestEnquiries = async (req, res) => {
+    try {
+        const [general, contact, quote] = await Promise.all([
+            dbQueryAsync(`SELECT * FROM enquiries          ORDER BY created_date DESC LIMIT 2`),
+            dbQueryAsync(`SELECT * FROM contact_us_enquiry ORDER BY created_date DESC LIMIT 2`),
+            dbQueryAsync(`SELECT * FROM get_enquire_quote  ORDER BY created_date DESC LIMIT 2`),
+        ]);
+
+        return res.json({
+            status: 1,
+            data: { general, contact, quote }
+        });
+    } catch (err) {
+        return res.json({ status: 0, message: "DB error" });
+    }
+};
 
 
 

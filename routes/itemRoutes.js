@@ -118,13 +118,23 @@ router.post('/order-trackingdelete', auth, itemController.deleteOrderTracking);
 
 router.post('/sample-enquirycreate', auth, itemController.createSampleEnquiry);
 
-router.get('/sample-enquirylist', itemController.getSampleEnquiries);
+router.get('/sample-enquirylist', auth, itemController.getSampleEnquiries);
 
 router.get('/sample-enquiry/:id', auth, itemController.getSampleEnquiry);
 
 router.post('/sample-enquiryupdate', auth, itemController.updateSampleEnquiry);
 
 router.post('/sample-enquirydelete', auth, itemController.deleteSampleEnquiry);
+
+
+// ── Admin notifications (recent activity feed) ──────────────────────────
+router.get('/recent-activity', auth, itemController.getRecentActivity);
+
+
+// ── Dashboard (real stats, monthly graph, latest-enquiry previews) ──────
+router.get('/dashboard-stats',             auth, itemController.getDashboardStats);
+router.get('/dashboard-monthly-enquiries', auth, itemController.getMonthlyEnquiries);
+router.get('/dashboard-latest-enquiries',  auth, itemController.getLatestEnquiries);
 
 
 module.exports = router;
