@@ -284,6 +284,27 @@ CREATE TABLE IF NOT EXISTS site_settings (
 );
 INSERT IGNORE INTO site_settings (id, invoice_prefix) VALUES (1, 'INV');
 
+-- ── Sample enquiries (admin-managed sample request tracking) ─────────────
+-- Table already exists in the live DB (created manually via phpMyAdmin);
+-- included here so schema.sql remains a complete initializer for fresh
+-- environments.
+CREATE TABLE IF NOT EXISTS sample_enquiry (
+    enquiry_id      INT PRIMARY KEY,
+    customer_id     INT NOT NULL,
+    enquired_on     DATE NOT NULL,
+    product_name    VARCHAR(255) NOT NULL,
+    quantity        INT NOT NULL DEFAULT 1,
+    responded       ENUM('Yes', 'No') DEFAULT 'No',
+    sample_ordered  ENUM('Yes', 'No') DEFAULT 'No',
+    sample_shipped  ENUM('Yes', 'No') DEFAULT 'No',
+    order_placed    ENUM('Yes', 'No') DEFAULT 'No',
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_sample_enquiry_customer
+        FOREIGN KEY (customer_id) REFERENCES customer_master(id)
+        ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
 -- ── Activity log (see migrations/005_activity_log.sql) ───────────────────
 -- Backs the admin panel's real (non-mocked) notification feed. Most
 -- notification types are reconstructed from existing tables' own
