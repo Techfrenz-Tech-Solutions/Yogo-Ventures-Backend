@@ -30,9 +30,22 @@ CREATE TABLE IF NOT EXISTS country_master (
     id            INT AUTO_INCREMENT PRIMARY KEY,
     country_code  VARCHAR(10)  NOT NULL,
     country_name  VARCHAR(100) NOT NULL,
+    phone_code    VARCHAR(10)  NULL,
     created_date  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_date  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
+
+-- ── country_master phone dialing code (see migrations/006_country_phone_code.sql) ──
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'country_master' AND column_name = 'phone_code'
+);
+SET @sql := IF(@col_exists = 0,
+    'ALTER TABLE country_master ADD COLUMN phone_code VARCHAR(10) NULL',
+    'SELECT 1');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 -- ── Category / Sub-category ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS category_master (
@@ -317,3 +330,88 @@ CREATE TABLE IF NOT EXISTS activity_log (
     reference_id  VARCHAR(100) NULL,
     created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ── Product variation images (see migrations/007_product_images.sql) ────
+-- Replaces the fixed image1..image5 columns (still present on
+-- product_master, but frozen/unused going forward) with a scalable,
+-- individually-deletable, orderable set of variation images per product.
+CREATE TABLE IF NOT EXISTS product_images (
+    id           INT AUTO_INCREMENT PRIMARY KEY,
+    product_id   INT NOT NULL,
+    image_path   VARCHAR(500) NOT NULL,
+    sort_order   INT NOT NULL DEFAULT 0,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_product_images_product
+        FOREIGN KEY (product_id) REFERENCES product_master(id)
+        ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+INSERT INTO product_images (product_id, image_path, sort_order)
+SELECT pm.id, pm.image1, 0 FROM product_master pm
+WHERE pm.image1 IS NOT NULL AND pm.image1 != ''
+  AND NOT EXISTS (SELECT 1 FROM product_images pi WHERE pi.product_id = pm.id AND pi.sort_order = 0);
+
+INSERT INTO product_images (product_id, image_path, sort_order)
+SELECT pm.id, pm.image2, 1 FROM product_master pm
+WHERE pm.image2 IS NOT NULL AND pm.image2 != ''
+  AND NOT EXISTS (SELECT 1 FROM product_images pi WHERE pi.product_id = pm.id AND pi.sort_order = 1);
+
+INSERT INTO product_images (product_id, image_path, sort_order)
+SELECT pm.id, pm.image3, 2 FROM product_master pm
+WHERE pm.image3 IS NOT NULL AND pm.image3 != ''
+  AND NOT EXISTS (SELECT 1 FROM product_images pi WHERE pi.product_id = pm.id AND pi.sort_order = 2);
+
+INSERT INTO product_images (product_id, image_path, sort_order)
+SELECT pm.id, pm.image4, 3 FROM product_master pm
+WHERE pm.image4 IS NOT NULL AND pm.image4 != ''
+  AND NOT EXISTS (SELECT 1 FROM product_images pi WHERE pi.product_id = pm.id AND pi.sort_order = 3);
+
+INSERT INTO product_images (product_id, image_path, sort_order)
+SELECT pm.id, pm.image5, 4 FROM product_master pm
+WHERE pm.image5 IS NOT NULL AND pm.image5 != ''
+  AND NOT EXISTS (SELECT 1 FROM product_images pi WHERE pi.product_id = pm.id AND pi.sort_order = 4);
+
+-- ── Dynamic order date columns (see migrations/008_order_dynamic_dates.sql) ──
+-- Replaces order_tracking's 15 fixed date columns with a scalable title +
+-- value structure. The legacy columns stay (frozen, unused) for backward
+-- compatibility; new code uses order_dates / order_date_titles exclusively.
+CREATE TABLE IF NOT EXISTS order_date_titles (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    display_name    VARCHAR(100) NOT NULL,
+    normalised_name VARCHAR(100) NOT NULL,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_order_date_titles_normalised (normalised_name)
+);
+
+CREATE TABLE IF NOT EXISTS order_dates (
+    id                 INT AUTO_INCREMENT PRIMARY KEY,
+    order_tracking_id  INT NOT NULL,
+    date_title_id      INT NOT NULL,
+    date_value         DATE NOT NULL,
+    created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_order_dates_order_title (order_tracking_id, date_title_id),
+    CONSTRAINT fk_order_dates_order
+        FOREIGN KEY (order_tracking_id) REFERENCES order_tracking(id)
+        ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_order_dates_title
+        FOREIGN KEY (date_title_id) REFERENCES order_date_titles(id)
+        ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+INSERT IGNORE INTO order_date_titles (display_name, normalised_name) VALUES
+    ('Order Placed',                'order-placed'),
+    ('Product Initiated',           'product-initiated'),
+    ('Inspection Initiated',        'inspection-initiated'),
+    ('Certification In Progress',   'certification-in-progress'),
+    ('Packing In Progress',         'packing-in-progress'),
+    ('Shipped From Manufacturer',   'shipped-from-manufacturer'),
+    ('In Yogo Warehouse',           'in-yogo-warehouse'),
+    ('Shipped From Yogo',           'shipped-from-yogo'),
+    ('Customer Clearance (Loading)','customer-clearance-loading'),
+    ('Bill of Loading',             'bill-of-loading'),
+    ('Sold On',                     'sold-on'),
+    ('Reached Destination (On)',    'reached-destination'),
+    ('Customer Clearance (Dest)',   'customer-clearance-dest'),
+    ('Reached Customer Warehouse',  'reached-customer-warehouse'),
+    ('Order Completed',             'order-completed');

@@ -33,12 +33,21 @@ function logActivity(actionType, description, referenceId) {
 }
 
 // Create Enquiry
+// A phone dialing code must be "+" followed by 1-4 digits — e.g. "+91",
+// "+1", "+44". Rejects "91" (missing +), "++91" (double +), "+91abc"
+// (trailing non-digits) and empty/overlong values.
+const PHONE_CODE_PATTERN = /^\+[0-9]{1,4}$/;
+function isValidPhoneCode(value) {
+    return typeof value === 'string' && PHONE_CODE_PATTERN.test(value.trim());
+}
+
 exports.createCountry = (req, res) => {
     const reqData = req.body;
 
     const v = new Validator(reqData, {
         country_code: 'required|string|maxLength:10',
-        country_name: 'required|string|maxLength:100'
+        country_name: 'required|string|maxLength:100',
+        phone_code:   'required|string|maxLength:10'
     });
 
     v.check().then((matched) => {
@@ -49,14 +58,21 @@ exports.createCountry = (req, res) => {
             return res.json({ status: 0, message: error_message });
         }
 
+        if (!isValidPhoneCode(reqData.phone_code)) {
+            return res.json({
+                status: 0,
+                message: "Phone code must start with '+' followed by 1-4 digits only (e.g. +91)."
+            });
+        }
+
         const insertQuery = `
             INSERT INTO country_master
-            (country_code, country_name)
-            VALUES (?, ?)`;
+            (country_code, country_name, phone_code)
+            VALUES (?, ?, ?)`;
 
         db.mainDb(
             insertQuery,
-            [reqData.country_code, reqData.country_name],
+            [reqData.country_code, reqData.country_name, reqData.phone_code.trim()],
             (err, result) => {
                 if (err) {
                     return res.json({ status: 0, message: "DB error" });
@@ -125,7 +141,8 @@ exports.updateCountry = (req, res) => {
     const v = new Validator(reqData, {
         id: 'required|integer',
         country_code: 'required|string|maxLength:10',
-        country_name: 'required|string|maxLength:100'
+        country_name: 'required|string|maxLength:100',
+        phone_code:   'required|string|maxLength:10'
     });
 
     v.check().then((matched) => {
@@ -140,9 +157,16 @@ exports.updateCountry = (req, res) => {
             });
         }
 
+        if (!isValidPhoneCode(reqData.phone_code)) {
+            return res.json({
+                status: 0,
+                message: "Phone code must start with '+' followed by 1-4 digits only (e.g. +91)."
+            });
+        }
+
         const updateQuery = `
             UPDATE country_master
-            SET country_code = ?, country_name = ?
+            SET country_code = ?, country_name = ?, phone_code = ?
             WHERE id = ?`;
 
         db.mainDb(
@@ -150,6 +174,7 @@ exports.updateCountry = (req, res) => {
             [
                 reqData.country_code,
                 reqData.country_name,
+                reqData.phone_code.trim(),
                 reqData.id
             ],
             (err, result) => {
@@ -231,6 +256,9 @@ exports.createCategory = (req, res) => {
             [reqData.category_code, reqData.category_name],
             (err, result) => {
                 if (err) {
+                    if (err.code === 'ER_DUP_ENTRY') {
+                        return res.json({ status: 0, message: "Category code already exists. Please use a different code." });
+                    }
                     return res.json({ status: 0, message: "DB error" });
                 }
 
@@ -413,7 +441,8 @@ exports.countryDropdown = (req, res) => {
     const query = `
         SELECT
             id,
-            country_name
+            country_name,
+            phone_code
         FROM country_master
         ORDER BY id ASC
     `;
@@ -445,7 +474,7 @@ exports.createSubCategory = (req, res) => {
         category_name: 'required|string|maxLength:100'
     });
 
-    v.check().then((matched) => {
+    v.check().then(async (matched) => {
         if (!matched) {
             const error_message = Object.values(v.errors)
                 .map(e => e.message)
@@ -455,6 +484,21 @@ exports.createSubCategory = (req, res) => {
                 status: 0,
                 message: error_message
             });
+        }
+
+        // sub_category_master has no DB-level unique constraint on
+        // sub_category_code (legacy data already has duplicates), so
+        // uniqueness is enforced here at the application level instead.
+        try {
+            const existing = await dbQueryAsync(
+                `SELECT id FROM sub_category_master WHERE sub_category_code = ?`,
+                [reqData.sub_category_code]
+            );
+            if (existing.length > 0) {
+                return res.json({ status: 0, message: "Sub category code already exists. Please use a different code." });
+            }
+        } catch (err) {
+            return res.json({ status: 0, message: "DB error" });
         }
 
         const query = `
@@ -691,7 +735,7 @@ exports.createProduct = (req, res) => {
         product_description: 'required|string'
     });
 
-    v.check().then((matched) => {
+    v.check().then(async (matched) => {
 
         if (!matched) {
             const error_message = Object.values(v.errors)
@@ -704,114 +748,142 @@ exports.createProduct = (req, res) => {
             });
         }
 
-        const files = req.files || {};
-
-        const query = `
-            INSERT INTO product_master
-            (
-                product_code,
-                product_name,
-                category_name,
-                sub_category_name,
-                product_description,
-                index_image,
-                image1,
-                image2,
-                image3,
-                image4,
-                image5
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `;
-
-        db.mainDb(
-            query,
-            [
-                reqData.product_code,
-                reqData.product_name,
-                reqData.category_name,
-                reqData.sub_category_name,
-                reqData.product_description,
-                files.index_image?.[0]?.filename || '',
-                files.image1?.[0]?.filename || '',
-                files.image2?.[0]?.filename || '',
-                files.image3?.[0]?.filename || '',
-                files.image4?.[0]?.filename || '',
-                files.image5?.[0]?.filename || ''
-            ],
-            (err, result) => {
-
-                if (err) {
-                    return res.json({
-                        status: 0,
-                        message: "DB error"
-                    });
-                }
-
-                return res.json({
-                    status: 1,
-                    message: "Product created successfully",
-                    id: result.insertId
-                });
+        // product_master has no DB-level unique constraint on product_code
+        // (legacy data already has duplicates), so uniqueness is enforced
+        // here at the application level instead.
+        try {
+            const existing = await dbQueryAsync(
+                `SELECT id FROM product_master WHERE product_code = ?`,
+                [reqData.product_code]
+            );
+            if (existing.length > 0) {
+                return res.json({ status: 0, message: "Product code already exists. Please use a different code." });
             }
-        );
+        } catch (err) {
+            return res.json({ status: 0, message: "DB error" });
+        }
+
+        const files = req.files || {};
+        const indexImage = files.index_image?.[0]?.filename || '';
+        const variationFiles = files.variation_images || [];
+
+        // Product row + its variation_images rows are inserted in one
+        // transaction so a mid-way failure (e.g. an image insert error)
+        // can't leave a product with no images or an orphaned image row
+        // pointing at a non-existent product.
+        try {
+            const productId = await db.withTransaction(async (txQuery) => {
+                const insertResult = await txQuery(
+                    `INSERT INTO product_master
+                     (product_code, product_name, category_name, sub_category_name, product_description, index_image, image1, image2, image3, image4, image5)
+                     VALUES (?, ?, ?, ?, ?, ?, '', '', '', '', '')`,
+                    [
+                        reqData.product_code,
+                        reqData.product_name,
+                        reqData.category_name,
+                        reqData.sub_category_name,
+                        reqData.product_description,
+                        indexImage
+                    ]
+                );
+
+                const newProductId = insertResult.insertId;
+                for (let i = 0; i < variationFiles.length; i++) {
+                    await txQuery(
+                        `INSERT INTO product_images (product_id, image_path, sort_order) VALUES (?, ?, ?)`,
+                        [newProductId, variationFiles[i].filename, i]
+                    );
+                }
+                return newProductId;
+            });
+
+            return res.json({
+                status: 1,
+                message: "Product created successfully",
+                id: productId
+            });
+        } catch (err) {
+            // Nothing was committed — clean up the files that were already
+            // written to disk so a failed create doesn't orphan them.
+            if (indexImage) deleteStorageFile(indexImage);
+            variationFiles.forEach(f => deleteStorageFile(f.filename));
+            return res.json({ status: 0, message: "DB error" });
+        }
     });
 };
 
 
 
-exports.getProducts = (req, res) => {
+// Groups a flat product_images result set into { [product_id]: [rows] },
+// each product's rows already ordered by sort_order (then id as a tiebreaker)
+// thanks to the ORDER BY in the calling query.
+function groupImagesByProduct(imageRows) {
+    const map = {};
+    for (const row of imageRows) {
+        (map[row.product_id] = map[row.product_id] || []).push({
+            id: row.id,
+            image_path: row.image_path,
+            sort_order: row.sort_order
+        });
+    }
+    return map;
+}
 
-    db.mainDb(
-        `SELECT * FROM product_master ORDER BY id DESC`,
-        [],
-        (err, result) => {
+exports.getProducts = async (req, res) => {
+    try {
+        const products = await dbQueryAsync(`SELECT * FROM product_master ORDER BY id DESC`);
 
-            if (err) {
-                return res.json({
-                    status: 0,
-                    message: "DB error"
-                });
-            }
-
-            return res.json({
-                status: 1,
-                data: result
-            });
+        const ids = products.map(p => p.id);
+        let imagesByProduct = {};
+        if (ids.length > 0) {
+            const placeholders = ids.map(() => '?').join(',');
+            const imageRows = await dbQueryAsync(
+                `SELECT id, product_id, image_path, sort_order FROM product_images WHERE product_id IN (${placeholders}) ORDER BY product_id, sort_order, id`,
+                ids
+            );
+            imagesByProduct = groupImagesByProduct(imageRows);
         }
-    );
+
+        const data = products.map(p => ({
+            ...p,
+            // variation_images is the new source of truth; image1..image5
+            // are kept in the row (untouched, legacy) for anything still
+            // reading them directly, but no longer meant to be relied on.
+            variation_images: imagesByProduct[p.id] || []
+        }));
+
+        return res.json({ status: 1, data });
+    } catch (err) {
+        return res.json({ status: 0, message: "DB error" });
+    }
 };
 
 
-exports.getProduct = (req, res) => {
+exports.getProduct = async (req, res) => {
 
     const id = req.params.id;
 
-    db.mainDb(
-        `SELECT * FROM product_master WHERE id = ?`,
-        [id],
-        (err, result) => {
-
-            if (err) {
-                return res.json({
-                    status: 0,
-                    message: "DB error"
-                });
-            }
-
-            if (result.length === 0) {
-                return res.json({
-                    status: 0,
-                    message: "Product not found"
-                });
-            }
-
-            return res.json({
-                status: 1,
-                data: result[0]
-            });
+    try {
+        const rows = await dbQueryAsync(`SELECT * FROM product_master WHERE id = ?`, [id]);
+        if (rows.length === 0) {
+            return res.json({ status: 0, message: "Product not found" });
         }
-    );
+
+        const imageRows = await dbQueryAsync(
+            `SELECT id, product_id, image_path, sort_order FROM product_images WHERE product_id = ? ORDER BY sort_order, id`,
+            [id]
+        );
+
+        return res.json({
+            status: 1,
+            data: {
+                ...rows[0],
+                variation_images: imageRows.map(r => ({ id: r.id, image_path: r.image_path, sort_order: r.sort_order }))
+            }
+        });
+    } catch (err) {
+        return res.json({ status: 0, message: "DB error" });
+    }
 };
 
 
@@ -829,7 +901,7 @@ exports.updateProduct = (req, res) => {
         product_description: 'required|string'
     });
 
-    v.check().then((matched) => {
+    v.check().then(async (matched) => {
 
         if (!matched) {
             const error_message = Object.values(v.errors)
@@ -843,151 +915,165 @@ exports.updateProduct = (req, res) => {
         }
 
         const files = req.files || {};
-        const imageFields = ['index_image', 'image1', 'image2', 'image3', 'image4', 'image5'];
+        const newIndexImage = files.index_image?.[0]?.filename || null;
+        const newVariationFiles = files.variation_images || [];
 
-        const runUpdate = (images, filesToDelete) => {
-            const query = `
-                UPDATE product_master
-                SET
-                    product_code = ?,
-                    product_name = ?,
-                    category_name = ?,
-                    sub_category_name = ?,
-                    product_description = ?,
-                    index_image = ?,
-                    image1 = ?,
-                    image2 = ?,
-                    image3 = ?,
-                    image4 = ?,
-                    image5 = ?
-                WHERE id = ?
-            `;
-
-            db.mainDb(
-                query,
-                [
-                    reqData.product_code,
-                    reqData.product_name,
-                    reqData.category_name,
-                    reqData.sub_category_name,
-                    reqData.product_description,
-                    images.index_image,
-                    images.image1,
-                    images.image2,
-                    images.image3,
-                    images.image4,
-                    images.image5,
-                    reqData.id
-                ],
-                (err, result) => {
-
-                    if (err) {
-                        return res.json({
-                            status: 0,
-                            message: "DB error"
-                        });
-                    }
-
-                    if (result.affectedRows === 0) {
-                        return res.json({
-                            status: 0,
-                            message: "Product not found"
-                        });
-                    }
-
-                    // Only remove replaced images once the DB write has
-                    // actually succeeded, so a failed update never leaves a
-                    // product referencing a file that no longer exists.
-                    filesToDelete.forEach(deleteStorageFile);
-
-                    return res.json({
-                        status: 1,
-                        message: "Product updated successfully"
-                    });
+        // delete_image_ids: JSON array of product_images.id the admin removed
+        // in the edit form. Only ids that actually belong to *this* product
+        // are ever deleted (see the WHERE product_id = ? below) — an id for
+        // someone else's product is silently ignored, never acted on.
+        let deleteImageIds = [];
+        if (reqData.delete_image_ids) {
+            try {
+                const parsed = JSON.parse(reqData.delete_image_ids);
+                if (Array.isArray(parsed)) {
+                    deleteImageIds = parsed.map(Number).filter(Number.isInteger);
                 }
-            );
-        };
-
-        // Always look up the existing row first — this is what tells us
-        // which on-disk files, if any, get replaced and should be cleaned up.
-        db.mainDb(
-            `SELECT index_image, image1, image2, image3, image4, image5 FROM product_master WHERE id = ?`,
-            [reqData.id],
-            (err, existingRows) => {
-                if (err || existingRows.length === 0) {
-                    return res.json({ status: 0, message: "Product not found" });
-                }
-
-                const existing = existingRows[0];
-                const images = {};
-                const filesToDelete = [];
-                imageFields.forEach((field) => {
-                    const newFilename = files[field]?.[0]?.filename;
-                    if (newFilename) {
-                        images[field] = newFilename;
-                        if (existing[field] && existing[field] !== newFilename) {
-                            filesToDelete.push(existing[field]);
-                        }
-                    } else {
-                        images[field] = existing[field] || '';
-                    }
-                });
-                runUpdate(images, filesToDelete);
+            } catch {
+                // ignore malformed input — nothing gets deleted
             }
-        );
+        }
+
+        try {
+            const { replacedIndexImage, deletedImagePaths } = await db.withTransaction(async (txQuery) => {
+                const existingRows = await txQuery(
+                    `SELECT index_image FROM product_master WHERE id = ?`,
+                    [reqData.id]
+                );
+                if (existingRows.length === 0) {
+                    const notFound = new Error('Product not found');
+                    notFound.isNotFound = true;
+                    throw notFound;
+                }
+
+                const existingIndexImage = existingRows[0].index_image;
+                const indexImageToStore = newIndexImage || existingIndexImage || '';
+
+                const updateResult = await txQuery(
+                    `UPDATE product_master
+                     SET product_code = ?, product_name = ?, category_name = ?, sub_category_name = ?, product_description = ?, index_image = ?
+                     WHERE id = ?`,
+                    [
+                        reqData.product_code,
+                        reqData.product_name,
+                        reqData.category_name,
+                        reqData.sub_category_name,
+                        reqData.product_description,
+                        indexImageToStore,
+                        reqData.id
+                    ]
+                );
+                if (updateResult.affectedRows === 0) {
+                    const notFound = new Error('Product not found');
+                    notFound.isNotFound = true;
+                    throw notFound;
+                }
+
+                let deletedPaths = [];
+                if (deleteImageIds.length > 0) {
+                    const placeholders = deleteImageIds.map(() => '?').join(',');
+                    const toDelete = await txQuery(
+                        `SELECT id, image_path FROM product_images WHERE product_id = ? AND id IN (${placeholders})`,
+                        [reqData.id, ...deleteImageIds]
+                    );
+                    if (toDelete.length > 0) {
+                        const delPlaceholders = toDelete.map(() => '?').join(',');
+                        await txQuery(
+                            `DELETE FROM product_images WHERE id IN (${delPlaceholders})`,
+                            toDelete.map(r => r.id)
+                        );
+                        deletedPaths = toDelete.map(r => r.image_path);
+                    }
+                }
+
+                if (newVariationFiles.length > 0) {
+                    const maxRows = await txQuery(
+                        `SELECT COALESCE(MAX(sort_order), -1) AS maxOrder FROM product_images WHERE product_id = ?`,
+                        [reqData.id]
+                    );
+                    let nextOrder = maxRows[0].maxOrder + 1;
+                    for (const f of newVariationFiles) {
+                        await txQuery(
+                            `INSERT INTO product_images (product_id, image_path, sort_order) VALUES (?, ?, ?)`,
+                            [reqData.id, f.filename, nextOrder++]
+                        );
+                    }
+                }
+
+                return {
+                    replacedIndexImage: (newIndexImage && existingIndexImage && existingIndexImage !== newIndexImage) ? existingIndexImage : null,
+                    deletedImagePaths: deletedPaths
+                };
+            });
+
+            // Only remove replaced/deleted files once the DB write has
+            // actually committed, so a failed update never leaves a product
+            // referencing a file that no longer exists on disk.
+            if (replacedIndexImage) deleteStorageFile(replacedIndexImage);
+            deletedImagePaths.forEach(deleteStorageFile);
+
+            return res.json({
+                status: 1,
+                message: "Product updated successfully"
+            });
+        } catch (err) {
+            // Transaction rolled back — nothing was persisted, so any files
+            // uploaded on this request are orphaned and must be cleaned up.
+            if (newIndexImage) deleteStorageFile(newIndexImage);
+            newVariationFiles.forEach(f => deleteStorageFile(f.filename));
+
+            if (err && err.isNotFound) {
+                return res.json({ status: 0, message: "Product not found" });
+            }
+            return res.json({ status: 0, message: "DB error" });
+        }
     });
 };
 
-exports.deleteProduct = (req, res) => {
+exports.deleteProduct = async (req, res) => {
 
     const id = req.body.id;
 
-    db.mainDb(
-        `SELECT product_code, product_name, index_image, image1, image2, image3, image4, image5 FROM product_master WHERE id = ?`,
-        [id],
-        (selectErr, existingRows) => {
-            if (selectErr) {
-                return res.json({ status: 0, message: "DB error" });
-            }
+    try {
+        const existingRows = await dbQueryAsync(
+            `SELECT product_code, product_name, index_image, image1, image2, image3, image4, image5 FROM product_master WHERE id = ?`,
+            [id]
+        );
 
-            db.mainDb(
-                `DELETE FROM product_master WHERE id = ?`,
-                [id],
-                (err, result) => {
+        // Variation image file paths, read before the delete — once the
+        // product_master row is gone, ON DELETE CASCADE removes the
+        // product_images rows too, so this is the only chance to know
+        // which files on disk need cleaning up.
+        const variationImageRows = await dbQueryAsync(
+            `SELECT image_path FROM product_images WHERE product_id = ?`,
+            [id]
+        );
 
-                    if (err) {
-                        return res.json({
-                            status: 0,
-                            message: "DB error"
-                        });
-                    }
+        const result = await dbQueryAsync(`DELETE FROM product_master WHERE id = ?`, [id]);
 
-                    if (result.affectedRows === 0) {
-                        return res.json({
-                            status: 0,
-                            message: "Product not found"
-                        });
-                    }
+        if (result.affectedRows === 0) {
+            return res.json({ status: 0, message: "Product not found" });
+        }
 
-                    if (existingRows.length > 0) {
-                        ['index_image', 'image1', 'image2', 'image3', 'image4', 'image5']
-                            .forEach((field) => deleteStorageFile(existingRows[0][field]));
+        if (existingRows.length > 0) {
+            ['index_image', 'image1', 'image2', 'image3', 'image4', 'image5']
+                .forEach((field) => deleteStorageFile(existingRows[0][field]));
 
-                        logActivity(
-                            'product_deleted',
-                            `Product deleted — ${existingRows[0].product_name}`,
-                            existingRows[0].product_code
-                        );
-                    }
-
-                    return res.json({
-                        status: 1,
-                        message: "Product deleted successfully"
-                    });
-                }
+            logActivity(
+                'product_deleted',
+                `Product deleted — ${existingRows[0].product_name}`,
+                existingRows[0].product_code
             );
         }
-    );
+        variationImageRows.forEach((row) => deleteStorageFile(row.image_path));
+
+        return res.json({
+            status: 1,
+            message: "Product deleted successfully"
+        });
+    } catch (err) {
+        return res.json({ status: 0, message: "DB error" });
+    }
 };
 
 //------------------------------------------------------------------------------
@@ -2487,7 +2573,7 @@ exports.createOrderTracking = (req, res) => {
         quantity: 'required|integer'
     });
 
-    v.check().then((matched) => {
+    v.check().then(async (matched) => {
 
         if (!matched) {
             const error_message = Object.values(v.errors)
@@ -2500,124 +2586,141 @@ exports.createOrderTracking = (req, res) => {
             });
         }
 
-        const query = `
-            INSERT INTO order_tracking (
-                order_id,
-                customer_id,
-                product_name,
-                quantity,
-                order_placed_date,
-                product_initiated_date,
-                inspection_initiated_date,
-                certification_in_progress_date,
-                packing_in_progress_date,
-                shipped_from_manufacturer_date,
-                in_yogo_warehouse_date,
-                shipped_from_yogo_date,
-                customer_clearance_date,
-                bill_of_loading_date,
-                sold_on_date,
-                reached_destination_date,
-                customer_clearance_destination_date,
-                reached_customer_warehouse_date,
-                order_complete_date
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `;
+        const { dates, error } = prepareOrderDates(reqData.dates);
+        if (error) {
+            return res.json({ status: 0, message: error });
+        }
 
-        db.mainDb(
-            query,
-            [
-                reqData.order_id,
-                reqData.customer_id,
-                reqData.product_name,
-                reqData.quantity,
-                reqData.order_placed_date || null,
-                reqData.product_initiated_date || null,
-                reqData.inspection_initiated_date || null,
-                reqData.certification_in_progress_date || null,
-                reqData.packing_in_progress_date || null,
-                reqData.shipped_from_manufacturer_date || null,
-                reqData.in_yogo_warehouse_date || null,
-                reqData.shipped_from_yogo_date || null,
-                reqData.customer_clearance_date || null,
-                reqData.bill_of_loading_date || null,
-                reqData.sold_on_date || null,
-                reqData.reached_destination_date || null,
-                reqData.customer_clearance_destination_date || null,
-                reqData.reached_customer_warehouse_date || null,
-                reqData.order_complete_date || null
-            ],
-            (err, result) => {
+        try {
+            const existingOrder = await dbQueryAsync(`SELECT id FROM order_tracking WHERE order_id = ?`, [reqData.order_id]);
+            if (existingOrder.length > 0) {
+                return res.json({ status: 0, message: "Order ID already exists. Please use a different Order ID." });
+            }
 
-                if (err) {
-                    return res.json({
-                        status: 0,
-                        message: "DB error"
-                    });
+            const existingCustomer = await dbQueryAsync(`SELECT id FROM customer_master WHERE id = ?`, [reqData.customer_id]);
+            if (existingCustomer.length === 0) {
+                return res.json({ status: 0, message: "Selected customer does not exist." });
+            }
+
+            const newId = await db.withTransaction(async (txQuery) => {
+                const insertResult = await txQuery(
+                    `INSERT INTO order_tracking (order_id, customer_id, product_name, quantity) VALUES (?, ?, ?, ?)`,
+                    [reqData.order_id, reqData.customer_id, reqData.product_name, reqData.quantity]
+                );
+                const orderTrackingId = insertResult.insertId;
+
+                for (const d of dates) {
+                    const titleId = await findOrCreateDateTitle(txQuery, d.title);
+                    await txQuery(
+                        `INSERT INTO order_dates (order_tracking_id, date_title_id, date_value) VALUES (?, ?, ?)`,
+                        [orderTrackingId, titleId, d.value]
+                    );
                 }
 
-                return res.json({
-                    status: 1,
-                    message: "Order Tracking created successfully",
-                    id: result.insertId
-                });
-            }
-        );
+                return orderTrackingId;
+            });
+
+            return res.json({
+                status: 1,
+                message: "Order Tracking created successfully",
+                id: newId
+            });
+        } catch (err) {
+            return res.json({ status: 0, message: "DB error" });
+        }
     });
 };
 
-exports.getOrderTrackingList = (req, res) => {
+exports.getOrderTrackingList = async (req, res) => {
+    try {
+        const orders = await dbQueryAsync(
+            `SELECT id, order_id, customer_id, product_name, quantity, created_date, updated_date FROM order_tracking ORDER BY id DESC`
+        );
 
-    db.mainDb(
-        `SELECT * FROM order_tracking ORDER BY id DESC`,
-        [],
-        (err, result) => {
+        const customerIds = [...new Set(orders.map(o => o.customer_id))];
+        let customerById = {};
+        if (customerIds.length > 0) {
+            const placeholders = customerIds.map(() => '?').join(',');
+            const customers = await dbQueryAsync(
+                `SELECT id, customer_name FROM customer_master WHERE id IN (${placeholders})`,
+                customerIds
+            );
+            customerById = Object.fromEntries(customers.map(c => [c.id, c.customer_name]));
+        }
 
-            if (err) {
-                return res.json({
-                    status: 0,
-                    message: "DB error"
+        const orderIds = orders.map(o => o.id);
+        let datesByOrder = {};
+        if (orderIds.length > 0) {
+            const placeholders = orderIds.map(() => '?').join(',');
+            const dateRows = await dbQueryAsync(
+                `SELECT od.order_tracking_id, odt.display_name, odt.normalised_name, od.date_value
+                 FROM order_dates od
+                 JOIN order_date_titles odt ON odt.id = od.date_title_id
+                 WHERE od.order_tracking_id IN (${placeholders})
+                 ORDER BY odt.display_name`,
+                orderIds
+            );
+            for (const row of dateRows) {
+                (datesByOrder[row.order_tracking_id] = datesByOrder[row.order_tracking_id] || []).push({
+                    title: row.display_name,
+                    normalisedTitle: row.normalised_name,
+                    value: row.date_value
                 });
             }
-
-            return res.json({
-                status: 1,
-                data: result
-            });
         }
-    );
+
+        const data = orders.map(o => ({
+            id: o.id,
+            order_id: o.order_id,
+            customer_id: o.customer_id,
+            customer_name: customerById[o.customer_id] || null,
+            product_name: o.product_name,
+            quantity: o.quantity,
+            created_date: o.created_date,
+            updated_date: o.updated_date,
+            dates: datesByOrder[o.id] || []
+        }));
+
+        return res.json({ status: 1, data });
+    } catch (err) {
+        return res.json({ status: 0, message: "DB error" });
+    }
 };
 
-exports.getOrderTracking = (req, res) => {
+exports.getOrderTracking = async (req, res) => {
 
     const id = req.params.id;
 
-    db.mainDb(
-        `SELECT * FROM order_tracking WHERE id = ?`,
-        [id],
-        (err, result) => {
-
-            if (err) {
-                return res.json({
-                    status: 0,
-                    message: "DB error"
-                });
-            }
-
-            if (result.length === 0) {
-                return res.json({
-                    status: 0,
-                    message: "Order Tracking not found"
-                });
-            }
-
-            return res.json({
-                status: 1,
-                data: result[0]
-            });
+    try {
+        const rows = await dbQueryAsync(
+            `SELECT id, order_id, customer_id, product_name, quantity, created_date, updated_date FROM order_tracking WHERE id = ?`,
+            [id]
+        );
+        if (rows.length === 0) {
+            return res.json({ status: 0, message: "Order Tracking not found" });
         }
-    );
+
+        const dateRows = await dbQueryAsync(
+            `SELECT odt.display_name, odt.normalised_name, od.date_value
+             FROM order_dates od
+             JOIN order_date_titles odt ON odt.id = od.date_title_id
+             WHERE od.order_tracking_id = ?
+             ORDER BY odt.display_name`,
+            [id]
+        );
+        const customerRows = await dbQueryAsync(`SELECT customer_name FROM customer_master WHERE id = ?`, [rows[0].customer_id]);
+
+        return res.json({
+            status: 1,
+            data: {
+                ...rows[0],
+                customer_name: customerRows[0]?.customer_name || null,
+                dates: dateRows.map(r => ({ title: r.display_name, normalisedTitle: r.normalised_name, value: r.date_value }))
+            }
+        });
+    } catch (err) {
+        return res.json({ status: 0, message: "DB error" });
+    }
 };
 
 
@@ -2633,7 +2736,7 @@ exports.updateOrderTracking = (req, res) => {
         quantity: 'required|integer'
     });
 
-    v.check().then((matched) => {
+    v.check().then(async (matched) => {
 
         if (!matched) {
             const error_message = Object.values(v.errors)
@@ -2646,76 +2749,74 @@ exports.updateOrderTracking = (req, res) => {
             });
         }
 
-        const query = `
-            UPDATE order_tracking SET
-                order_id = ?,
-                customer_id = ?,
-                product_name = ?,
-                quantity = ?,
-                order_placed_date = ?,
-                product_initiated_date = ?,
-                inspection_initiated_date = ?,
-                certification_in_progress_date = ?,
-                packing_in_progress_date = ?,
-                shipped_from_manufacturer_date = ?,
-                in_yogo_warehouse_date = ?,
-                shipped_from_yogo_date = ?,
-                customer_clearance_date = ?,
-                bill_of_loading_date = ?,
-                sold_on_date = ?,
-                reached_destination_date = ?,
-                customer_clearance_destination_date = ?,
-                reached_customer_warehouse_date = ?,
-                order_complete_date = ?
-            WHERE id = ?
-        `;
+        const { dates, error } = prepareOrderDates(reqData.dates);
+        if (error) {
+            return res.json({ status: 0, message: error });
+        }
 
-        db.mainDb(
-            query,
-            [
-                reqData.order_id,
-                reqData.customer_id,
-                reqData.product_name,
-                reqData.quantity,
-                reqData.order_placed_date || null,
-                reqData.product_initiated_date || null,
-                reqData.inspection_initiated_date || null,
-                reqData.certification_in_progress_date || null,
-                reqData.packing_in_progress_date || null,
-                reqData.shipped_from_manufacturer_date || null,
-                reqData.in_yogo_warehouse_date || null,
-                reqData.shipped_from_yogo_date || null,
-                reqData.customer_clearance_date || null,
-                reqData.bill_of_loading_date || null,
-                reqData.sold_on_date || null,
-                reqData.reached_destination_date || null,
-                reqData.customer_clearance_destination_date || null,
-                reqData.reached_customer_warehouse_date || null,
-                reqData.order_complete_date || null,
-                reqData.id
-            ],
-            (err, result) => {
-
-                if (err) {
-                    return res.json({
-                        status: 0,
-                        message: "DB error"
-                    });
-                }
-
-                if (result.affectedRows === 0) {
-                    return res.json({
-                        status: 0,
-                        message: "Order Tracking not found"
-                    });
-                }
-
-                return res.json({
-                    status: 1,
-                    message: "Order Tracking updated successfully"
-                });
+        try {
+            const existingCustomer = await dbQueryAsync(`SELECT id FROM customer_master WHERE id = ?`, [reqData.customer_id]);
+            if (existingCustomer.length === 0) {
+                return res.json({ status: 0, message: "Selected customer does not exist." });
             }
-        );
+
+            const dupOrderId = await dbQueryAsync(
+                `SELECT id FROM order_tracking WHERE order_id = ? AND id != ?`,
+                [reqData.order_id, reqData.id]
+            );
+            if (dupOrderId.length > 0) {
+                return res.json({ status: 0, message: "Order ID already exists. Please use a different Order ID." });
+            }
+
+            await db.withTransaction(async (txQuery) => {
+                const updateResult = await txQuery(
+                    `UPDATE order_tracking SET order_id = ?, customer_id = ?, product_name = ?, quantity = ? WHERE id = ?`,
+                    [reqData.order_id, reqData.customer_id, reqData.product_name, reqData.quantity, reqData.id]
+                );
+                if (updateResult.affectedRows === 0) {
+                    const notFound = new Error('Order Tracking not found');
+                    notFound.isNotFound = true;
+                    throw notFound;
+                }
+
+                // Remove only this order's value for a title the admin took
+                // out of the form — the title row itself (and any other
+                // order's use of it) is never touched here.
+                const existingDateRows = await txQuery(
+                    `SELECT od.id, odt.normalised_name
+                     FROM order_dates od
+                     JOIN order_date_titles odt ON odt.id = od.date_title_id
+                     WHERE od.order_tracking_id = ?`,
+                    [reqData.id]
+                );
+                const submittedNormalised = new Set(dates.map(d => d.normalised));
+                for (const row of existingDateRows) {
+                    if (!submittedNormalised.has(row.normalised_name)) {
+                        await txQuery(`DELETE FROM order_dates WHERE id = ?`, [row.id]);
+                    }
+                }
+
+                for (const d of dates) {
+                    const titleId = await findOrCreateDateTitle(txQuery, d.title);
+                    await txQuery(
+                        `INSERT INTO order_dates (order_tracking_id, date_title_id, date_value)
+                         VALUES (?, ?, ?)
+                         ON DUPLICATE KEY UPDATE date_value = VALUES(date_value)`,
+                        [reqData.id, titleId, d.value]
+                    );
+                }
+            });
+
+            return res.json({
+                status: 1,
+                message: "Order Tracking updated successfully"
+            });
+        } catch (err) {
+            if (err && err.isNotFound) {
+                return res.json({ status: 0, message: "Order Tracking not found" });
+            }
+            return res.json({ status: 0, message: "DB error" });
+        }
     });
 };
 
@@ -2859,8 +2960,14 @@ exports.createSampleEnquiry = (req, res) => {
 
 exports.getSampleEnquiries = (req, res) => {
 
+    // LEFT JOIN (not INNER) so a sample enquiry whose customer_id no longer
+    // matches a row in customer_master (deleted customer) still comes back —
+    // customer_name is simply NULL in that case, handled on the frontend.
     db.mainDb(
-        `SELECT * FROM sample_enquiry ORDER BY enquiry_id DESC`,
+        `SELECT se.*, cm.customer_name AS customer_name
+         FROM sample_enquiry se
+         LEFT JOIN customer_master cm ON cm.id = se.customer_id
+         ORDER BY se.enquiry_id DESC`,
         [],
         (err, result) => {
 
@@ -3185,6 +3292,148 @@ function dbQueryAsync(query, values = []) {
             if (err) reject(err); else resolve(result);
         });
     });
+}
+
+//-------------------------------------------------------------------
+// Next-code suggestion (Category / Sub-Category / Product "Add" forms).
+//
+// Reads every existing code, ignores anything that doesn't look like
+// "<letters><optional ->0-9+", and increments the numeric part of whichever
+// row has the highest numeric value — not the row count, since deleted
+// records or gaps would let count-based numbering collide with an existing
+// code. The winning row's own prefix and zero-padding width are reused, so
+// this adapts to whatever convention is actually stored (CAT-006, SUB014,
+// PROD014, ...) instead of assuming a hardcoded format. The frontend only
+// ever prefills a suggestion; create() still re-validates uniqueness so a
+// race between two admins can't produce two rows with the same code.
+const CODE_PATTERN = /^([A-Za-z]+-?)(\d+)$/;
+
+function computeNextCode(codes, fallback) {
+    let best = null;
+    for (const raw of codes) {
+        if (typeof raw !== 'string') continue;
+        const m = raw.trim().match(CODE_PATTERN);
+        if (!m) continue;
+        const numeric = parseInt(m[2], 10);
+        if (!best || numeric > best.numeric) {
+            best = { prefix: m[1], digits: m[2].length, numeric };
+        }
+    }
+    if (!best) return fallback;
+    const nextNumeric = best.numeric + 1;
+    const digits = Math.max(best.digits, String(nextNumeric).length);
+    return `${best.prefix}${String(nextNumeric).padStart(digits, '0')}`;
+}
+
+exports.getNextCategoryCode = async (req, res) => {
+    try {
+        const rows = await dbQueryAsync(`SELECT category_code FROM category_master`);
+        const code = computeNextCode(rows.map(r => r.category_code), 'CAT-001');
+        return res.json({ status: 1, code });
+    } catch (err) {
+        return res.json({ status: 0, message: "DB error" });
+    }
+};
+
+exports.getNextSubCategoryCode = async (req, res) => {
+    try {
+        const rows = await dbQueryAsync(`SELECT sub_category_code FROM sub_category_master`);
+        const code = computeNextCode(rows.map(r => r.sub_category_code), 'SUB001');
+        return res.json({ status: 1, code });
+    } catch (err) {
+        return res.json({ status: 0, message: "DB error" });
+    }
+};
+
+exports.getNextProductCode = async (req, res) => {
+    try {
+        const rows = await dbQueryAsync(`SELECT product_code FROM product_master`);
+        const code = computeNextCode(rows.map(r => r.product_code), 'PROD001');
+        return res.json({ status: 1, code });
+    } catch (err) {
+        return res.json({ status: 0, message: "DB error" });
+    }
+};
+
+exports.getNextOrderId = async (req, res) => {
+    try {
+        const rows = await dbQueryAsync(`SELECT order_id FROM order_tracking`);
+        const code = computeNextCode(rows.map(r => r.order_id), 'ORD-001');
+        return res.json({ status: 1, code });
+    } catch (err) {
+        return res.json({ status: 0, message: "DB error" });
+    }
+};
+
+//-------------------------------------------------------------------
+// Order Tracking — dynamic per-order milestone dates (order_dates /
+// order_date_titles) instead of a fixed set of date columns.
+//-------------------------------------------------------------------
+
+// "Ship Cargo", "ship cargo" and "Ship  Cargo" must all resolve to the same
+// title row — trim, collapse internal whitespace, lowercase, then join
+// words with hyphens for a stable lookup/storage key.
+function normaliseTitle(raw) {
+    return String(raw || '')
+        .trim()
+        .replace(/\s+/g, ' ')
+        .toLowerCase()
+        .replace(/ /g, '-');
+}
+
+// Looks up an existing date title by its normalised form, creating one if
+// this is the first time it's been used. The first admin to use a given
+// title (in any casing/spacing) sets the "clean" display form everyone
+// else reuses afterward — later variants never overwrite it.
+async function findOrCreateDateTitle(txQuery, rawTitle) {
+    const cleaned = String(rawTitle || '').trim().replace(/\s+/g, ' ');
+    const normalised = normaliseTitle(cleaned);
+    const existing = await txQuery(`SELECT id FROM order_date_titles WHERE normalised_name = ?`, [normalised]);
+    if (existing.length > 0) return existing[0].id;
+    const result = await txQuery(
+        `INSERT INTO order_date_titles (display_name, normalised_name) VALUES (?, ?)`,
+        [cleaned, normalised]
+    );
+    return result.insertId;
+}
+
+exports.getOrderDateTitles = async (req, res) => {
+    try {
+        const rows = await dbQueryAsync(
+            `SELECT id, display_name, normalised_name FROM order_date_titles ORDER BY display_name`
+        );
+        return res.json({ status: 1, data: rows });
+    } catch (err) {
+        return res.json({ status: 0, message: "DB error" });
+    }
+};
+
+// Validates and normalises the `dates` array shared by create/update:
+// skips genuinely empty rows (never submitted), rejects a bad date value or
+// a title reused twice within the same order. Returns either
+// { dates: [...] } or { error: "message" }.
+function prepareOrderDates(rawDates) {
+    const list = Array.isArray(rawDates) ? rawDates : [];
+    const seenNormalised = new Set();
+    const dates = [];
+
+    for (const d of list) {
+        const title = String(d?.title || '').trim().replace(/\s+/g, ' ');
+        const value = d?.value;
+        if (!title && !value) continue; // untouched empty row — not submitted
+        if (!title) return { error: "Each date entry needs a title." };
+        if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(String(value))) {
+            return { error: `"${title}" needs a valid date.` };
+        }
+        const normalised = normaliseTitle(title);
+        if (seenNormalised.has(normalised)) {
+            return { error: `"${title}" was added more than once — each date title can only be used once per order.` };
+        }
+        seenNormalised.add(normalised);
+        dates.push({ title, value, normalised });
+    }
+
+    return { dates };
 }
 
 exports.getDashboardStats = async (req, res) => {

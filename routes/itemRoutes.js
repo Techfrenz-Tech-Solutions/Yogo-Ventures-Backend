@@ -25,6 +25,7 @@ router.post('/categoryupdate', auth, itemController.updateCategory);
 router.post('/categorydelete', auth, itemController.deleteCategory);
 
 router.get('/categorydropdown', itemController.categoryDropdown);
+router.get('/categorynextcode', auth, itemController.getNextCategoryCode);
 
 
 
@@ -35,17 +36,18 @@ router.get('/sub-category/:id', auth, itemController.getSubCategory);
 router.post('/sub-categoryupdate', auth, itemController.updateSubCategory);
 router.post('/sub-categorydelete', auth, itemController.deleteSubCategory);
 router.get('/sub-categorydropdown', itemController.subCategoryDropdown);
+router.get('/sub-categorynextcode', auth, itemController.getNextSubCategoryCode);
 
 
 
 
+// MAX_VARIATION_IMAGES: a sensible configurable ceiling on how many
+// variation images one product can have — the field itself is dynamic
+// (unlimited-looking to the admin), this just caps abuse.
+const MAX_VARIATION_IMAGES = 20;
 const productImageFields = upload.fields([
     { name: 'index_image', maxCount: 1 },
-    { name: 'image1', maxCount: 1 },
-    { name: 'image2', maxCount: 1 },
-    { name: 'image3', maxCount: 1 },
-    { name: 'image4', maxCount: 1 },
-    { name: 'image5', maxCount: 1 }
+    { name: 'variation_images', maxCount: MAX_VARIATION_IMAGES }
 ]);
 
 // ── Product (list is public — used by the website) ─────────────
@@ -55,6 +57,7 @@ router.get('/product/:id', auth, itemController.getProduct);
 router.post('/productupdate', auth, uploadMiddleware(productImageFields), itemController.updateProduct);
 router.post('/productdelete', auth, itemController.deleteProduct);
 //router.get('/productdropdown', itemController.productDropdown);
+router.get('/productnextcode', auth, itemController.getNextProductCode);
 
 
 // ── Quote enquiries (create is public — website "Get a Quote" form) ──
@@ -114,6 +117,8 @@ router.get('/order-trackinglist', auth, itemController.getOrderTrackingList);
 router.get('/order-tracking/:id', auth, itemController.getOrderTracking);
 router.post('/order-trackingupdate', auth, itemController.updateOrderTracking);
 router.post('/order-trackingdelete', auth, itemController.deleteOrderTracking);
+router.get('/order-trackingnextcode', auth, itemController.getNextOrderId);
+router.get('/order-datetitles', auth, itemController.getOrderDateTitles);
 
 
 router.post('/sample-enquirycreate', auth, itemController.createSampleEnquiry);

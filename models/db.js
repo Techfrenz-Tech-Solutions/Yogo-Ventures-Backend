@@ -55,3 +55,46 @@ exports.mainDbForCron = function (query, values = []) {
         });
     });
 };
+
+// Runs `callback(txQuery)` against a single dedicated connection wrapped in
+// a transaction — commits if callback resolves, rolls back if it throws/
+// rejects. Needed anywhere a multi-step write (e.g. insert a product row +
+// insert its image rows) must not partially apply: mainDb/mainDbForCron each
+// grab a fresh pooled connection per call, so they can't share one
+// transaction across statements the way this can.
+exports.withTransaction = function (callback) {
+    return new Promise((resolve, reject) => {
+        pool.getConnection((err, connection) => {
+            if (err) return reject(err);
+
+            connection.beginTransaction((txErr) => {
+                if (txErr) {
+                    connection.release();
+                    return reject(txErr);
+                }
+
+                const txQuery = (query, values = []) => new Promise((res2, rej2) => {
+                    connection.query(query, values, (qErr, result) => {
+                        if (qErr) rej2(qErr); else res2(result);
+                    });
+                });
+
+                Promise.resolve()
+                    .then(() => callback(txQuery))
+                    .then((result) => {
+                        connection.commit((commitErr) => {
+                            connection.release();
+                            if (commitErr) return reject(commitErr);
+                            resolve(result);
+                        });
+                    })
+                    .catch((cbErr) => {
+                        connection.rollback(() => {
+                            connection.release();
+                            reject(cbErr);
+                        });
+                    });
+            });
+        });
+    });
+};
