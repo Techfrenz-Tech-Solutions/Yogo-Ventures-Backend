@@ -65,7 +65,10 @@ router.post('/enquiry-quotecreate', publicFormLimiter, itemController.createEnqu
 router.get('/enquiry-quotelist', auth, itemController.getEnquiryQuotes);
 router.get('/enquiry-quote/:id', auth, itemController.getEnquiryQuote);
 router.post('/enquiry-quoteupdate-status', auth, itemController.updateEnquiryQuoteStatus);
+
+router.post('/enquiry-quoteupdate-remarks', auth, itemController.updateEnquiryQuoteRemarks);
 router.post('/enquiry-quotedelete', auth, itemController.deleteEnquiryQuote);
+router.get('/enquiry-quoteexport', auth, itemController.exportEnquiryQuotes);
 
 
 // ── Contact us (create is public — website contact form) ───────
@@ -73,7 +76,10 @@ router.post('/contact-uscreate', publicFormLimiter, itemController.createContact
 router.get('/contact-uslist', auth, itemController.getContactUsList);
 router.get('/contact-us/:id', auth, itemController.getContactUs);
 router.post('/contact-usupdate-status', auth, itemController.updateContactUsStatus);
+
+router.post('/contact-usupdate-remarks', auth, itemController.updateContactUsRemarks);
 router.post('/contact-usdelete', auth, itemController.deleteContactUs);
+router.get('/contact-usexport', auth, itemController.exportContactUsList);
 
 
 
@@ -99,7 +105,10 @@ router.post('/enquirycreate', publicFormLimiter, itemController.createEnquiry);
 router.get('/enquirylist', auth, itemController.getEnquiries);
 router.get('/enquiry/:id', auth, itemController.getEnquiry);
 router.post('/enquiryupdate-status', auth, itemController.updateEnquiryStatus);
+
+router.post('/enquiryupdate-remarks', auth, itemController.updateEnquiryRemarks);
 router.post('/enquirydelete', auth, itemController.deleteEnquiry);
+router.get('/enquiryexport', auth, itemController.exportEnquiries);
 
 
 
@@ -109,16 +118,21 @@ router.get('/customerlist', auth, itemController.getCustomers);
 router.get('/customer/:id', auth, itemController.getCustomer);
 router.post('/customerupdate', auth, itemController.updateCustomer);
 router.post('/customerdelete', auth, itemController.deleteCustomer);
+router.get('/customerexport', auth, itemController.exportCustomers);
 
 
 // ── Order tracking (admin-only) ─────────────────────────────────
 router.post('/order-trackingcreate', auth, itemController.createOrderTracking);
 router.get('/order-trackinglist', auth, itemController.getOrderTrackingList);
 router.get('/order-tracking/:id', auth, itemController.getOrderTracking);
+router.patch('/order-tracking/:id/status', auth, itemController.updateOrderTrackingStatus);
+
+router.patch('/order-tracking/:id/remarks', auth, itemController.updateOrderTrackingRemarks);
 router.post('/order-trackingupdate', auth, itemController.updateOrderTracking);
 router.post('/order-trackingdelete', auth, itemController.deleteOrderTracking);
 router.get('/order-trackingnextcode', auth, itemController.getNextOrderId);
 router.get('/order-datetitles', auth, itemController.getOrderDateTitles);
+router.get('/order-trackingexport', auth, itemController.exportOrderTracking);
 
 
 router.post('/sample-enquirycreate', auth, itemController.createSampleEnquiry);
@@ -128,6 +142,10 @@ router.get('/sample-enquirylist', auth, itemController.getSampleEnquiries);
 router.get('/sample-enquiry/:id', auth, itemController.getSampleEnquiry);
 
 router.post('/sample-enquiryupdate', auth, itemController.updateSampleEnquiry);
+
+router.post('/sample-enquiryupdate-status', auth, itemController.updateSampleEnquiryStatus);
+
+router.post('/sample-enquiryupdate-remarks', auth, itemController.updateSampleEnquiryRemarks);
 
 router.post('/sample-enquirydelete', auth, itemController.deleteSampleEnquiry);
 

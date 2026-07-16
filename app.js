@@ -95,7 +95,12 @@ app.use(cors({
     return callback(new Error(`CORS blocked for origin: ${origin}`));
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'cache-control', 'pragma']
+  allowedHeaders: ['Content-Type', 'Authorization', 'cache-control', 'pragma'],
+  // Without this, browsers hide Content-Disposition on cross-origin
+  // responses — the admin panel's export download (a different origin
+  // from this API) couldn't read the server-generated filename and every
+  // .xlsx export silently fell back to a generic "export.xlsx".
+  exposedHeaders: ['Content-Disposition']
 }));
 
 // ================== BODY PARSERS ==================
