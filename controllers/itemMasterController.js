@@ -42,6 +42,12 @@ function isValidPhoneCode(value) {
     return typeof value === 'string' && PHONE_CODE_PATTERN.test(value.trim());
 }
 
+function normalizeOptionalStringField(reqData, fieldName) {
+    const rawValue = reqData[fieldName];
+    reqData[fieldName] = typeof rawValue === 'string' ? rawValue.trim() : '';
+    return reqData[fieldName] || null;
+}
+
 exports.createCountry = (req, res) => {
     const reqData = req.body;
 
@@ -742,12 +748,13 @@ exports.subCategoryDropdown = (req, res) => {
 exports.createProduct = (req, res) => {
 
     const reqData = req.body;
+    const subCategoryName = normalizeOptionalStringField(reqData, 'sub_category_name');
 
     const v = new Validator(reqData, {
         product_code: 'required|string|maxLength:50',
         product_name: 'required|string|maxLength:255',
         category_name: 'required|string|maxLength:100',
-        sub_category_name: 'required|string|maxLength:100',
+        sub_category_name: 'string|maxLength:100',
         product_description: 'required|string'
     });
 
@@ -797,7 +804,7 @@ exports.createProduct = (req, res) => {
                         reqData.product_code,
                         reqData.product_name,
                         reqData.category_name,
-                        reqData.sub_category_name,
+                        subCategoryName,
                         reqData.product_description,
                         indexImage
                     ]
@@ -907,13 +914,14 @@ exports.getProduct = async (req, res) => {
 exports.updateProduct = (req, res) => {
 
     const reqData = req.body;
+    const subCategoryName = normalizeOptionalStringField(reqData, 'sub_category_name');
 
     const v = new Validator(reqData, {
         id: 'required|integer',
         product_code: 'required|string|maxLength:50',
         product_name: 'required|string|maxLength:255',
         category_name: 'required|string|maxLength:100',
-        sub_category_name: 'required|string|maxLength:100',
+        sub_category_name: 'string|maxLength:100',
         product_description: 'required|string'
     });
 
@@ -973,7 +981,7 @@ exports.updateProduct = (req, res) => {
                         reqData.product_code,
                         reqData.product_name,
                         reqData.category_name,
-                        reqData.sub_category_name,
+                        subCategoryName,
                         reqData.product_description,
                         indexImageToStore,
                         reqData.id

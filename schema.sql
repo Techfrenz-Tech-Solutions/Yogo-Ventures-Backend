@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS product_master (
     product_code         VARCHAR(50)  NOT NULL,
     product_name         VARCHAR(255) NOT NULL,
     category_name        VARCHAR(100) NOT NULL,
-    sub_category_name    VARCHAR(100) NOT NULL,
+    sub_category_name    VARCHAR(100) NULL,
     product_description  TEXT,
     index_image          VARCHAR(255),
     image1                VARCHAR(255),
