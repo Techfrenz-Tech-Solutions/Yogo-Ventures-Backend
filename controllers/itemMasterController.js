@@ -3874,6 +3874,248 @@ exports.getOrderDateTitles = async (req, res) => {
     }
 };
 
+function escapeLikeTerm(raw) {
+    return String(raw || '').replace(/[\\%_]/g, '\\$&');
+}
+
+function adminSearchRoute(path, id) {
+    return `${path}?highlight=${encodeURIComponent(String(id))}`;
+}
+
+function normaliseSearchRow(row) {
+    return {
+        id: `${row.result_type}-${row.record_id}-${row.matched_value || row.title || ''}`,
+        type: row.result_type,
+        matched_value: row.matched_value || '',
+        description: row.description || '',
+        page: row.page,
+        path: row.path,
+        record_id: row.record_id,
+        highlight: row.highlight_id,
+        route: adminSearchRoute(row.path, row.highlight_id),
+    };
+}
+
+async function runGlobalSearchQuery(query, params, typeLimit) {
+    return dbQueryAsync(`${query} LIMIT ?`, [...params, typeLimit]);
+}
+
+exports.globalSearch = async (req, res) => {
+    const rawQuery = typeof req.query?.q === 'string' ? req.query.q.trim() : '';
+    if (rawQuery.length < 2) {
+        return res.json({ status: 1, data: [] });
+    }
+
+    const perTypeLimit = Math.min(Math.max(parseInt(req.query?.limit, 10) || 6, 1), 10);
+    const like = `%${escapeLikeTerm(rawQuery)}%`;
+
+    try {
+        const searches = [
+            runGlobalSearchQuery(`
+                SELECT DISTINCT
+                    'Product' AS result_type,
+                    p.id AS record_id,
+                    p.id AS highlight_id,
+                    '/product-master' AS path,
+                    'Product Master' AS page,
+                    CASE
+                        WHEN CAST(p.id AS CHAR) LIKE ? ESCAPE '\\\\' THEN CAST(p.id AS CHAR)
+                        WHEN p.product_code LIKE ? ESCAPE '\\\\' THEN p.product_code
+                        WHEN p.product_name LIKE ? ESCAPE '\\\\' THEN p.product_name
+                        WHEN p.category_name LIKE ? ESCAPE '\\\\' THEN p.category_name
+                        ELSE COALESCE(p.sub_category_name, '')
+                    END AS matched_value,
+                    CONCAT_WS(' · ', p.product_code, p.product_name, p.category_name, NULLIF(p.sub_category_name, '')) AS description
+                FROM product_master p
+                WHERE CAST(p.id AS CHAR) LIKE ? ESCAPE '\\\\'
+                   OR p.product_code LIKE ? ESCAPE '\\\\'
+                   OR p.product_name LIKE ? ESCAPE '\\\\'
+                   OR p.category_name LIKE ? ESCAPE '\\\\'
+                   OR p.sub_category_name LIKE ? ESCAPE '\\\\'
+                ORDER BY p.id DESC
+            `, [like, like, like, like, like, like, like, like, like], perTypeLimit),
+
+            runGlobalSearchQuery(`
+                SELECT
+                    'Customer' AS result_type,
+                    c.id AS record_id,
+                    c.id AS highlight_id,
+                    '/customer-master' AS path,
+                    'Customer Master' AS page,
+                    CASE
+                        WHEN CAST(c.id AS CHAR) LIKE ? ESCAPE '\\\\' THEN CAST(c.id AS CHAR)
+                        WHEN c.customer_name LIKE ? ESCAPE '\\\\' THEN c.customer_name
+                        WHEN c.email_id LIKE ? ESCAPE '\\\\' THEN c.email_id
+                        WHEN c.phone_number LIKE ? ESCAPE '\\\\' THEN c.phone_number
+                        ELSE c.country
+                    END AS matched_value,
+                    CONCAT_WS(' · ', CONCAT('Customer #', c.id), c.customer_name, c.email_id, c.phone_number) AS description
+                FROM customer_master c
+                WHERE CAST(c.id AS CHAR) LIKE ? ESCAPE '\\\\'
+                   OR c.customer_name LIKE ? ESCAPE '\\\\'
+                   OR c.email_id LIKE ? ESCAPE '\\\\'
+                   OR c.phone_number LIKE ? ESCAPE '\\\\'
+                   OR c.country LIKE ? ESCAPE '\\\\'
+                ORDER BY c.id DESC
+            `, [like, like, like, like, like, like, like, like, like], perTypeLimit),
+
+            runGlobalSearchQuery(`
+                SELECT DISTINCT
+                    'Order' AS result_type,
+                    ot.id AS record_id,
+                    ot.id AS highlight_id,
+                    '/order-tracking' AS path,
+                    'Order Tracking' AS page,
+                    CASE
+                        WHEN CAST(ot.id AS CHAR) LIKE ? ESCAPE '\\\\' THEN CAST(ot.id AS CHAR)
+                        WHEN ot.order_id LIKE ? ESCAPE '\\\\' THEN ot.order_id
+                        WHEN CAST(ot.customer_id AS CHAR) LIKE ? ESCAPE '\\\\' THEN CAST(ot.customer_id AS CHAR)
+                        WHEN cm.customer_name LIKE ? ESCAPE '\\\\' THEN cm.customer_name
+                        WHEN pm.product_code LIKE ? ESCAPE '\\\\' THEN pm.product_code
+                        ELSE COALESCE(pm.product_name, ot.product_name, '')
+                    END AS matched_value,
+                    CONCAT_WS(' · ', ot.order_id, CONCAT('Customer #', ot.customer_id), cm.customer_name, COALESCE(pm.product_name, ot.product_name), ot.status) AS description
+                FROM order_tracking ot
+                LEFT JOIN customer_master cm ON cm.id = ot.customer_id
+                LEFT JOIN order_items oi ON oi.order_id = ot.id
+                LEFT JOIN product_master pm ON pm.id = oi.product_id
+                WHERE CAST(ot.id AS CHAR) LIKE ? ESCAPE '\\\\'
+                   OR ot.order_id LIKE ? ESCAPE '\\\\'
+                   OR CAST(ot.customer_id AS CHAR) LIKE ? ESCAPE '\\\\'
+                   OR cm.customer_name LIKE ? ESCAPE '\\\\'
+                   OR cm.email_id LIKE ? ESCAPE '\\\\'
+                   OR cm.phone_number LIKE ? ESCAPE '\\\\'
+                   OR pm.product_name LIKE ? ESCAPE '\\\\'
+                   OR pm.product_code LIKE ? ESCAPE '\\\\'
+                   OR ot.product_name LIKE ? ESCAPE '\\\\'
+                ORDER BY ot.id DESC
+            `, [like, like, like, like, like, like, like, like, like, like, like, like, like, like], perTypeLimit),
+
+            runGlobalSearchQuery(`
+                SELECT
+                    'Quote' AS result_type,
+                    q.id AS record_id,
+                    q.id AS highlight_id,
+                    '/quote-enquiries' AS path,
+                    'Quote Enquiries' AS page,
+                    CASE
+                        WHEN q.reference_number LIKE ? ESCAPE '\\\\' THEN q.reference_number
+                        WHEN CAST(q.id AS CHAR) LIKE ? ESCAPE '\\\\' THEN CAST(q.id AS CHAR)
+                        WHEN q.product_name LIKE ? ESCAPE '\\\\' THEN q.product_name
+                        WHEN CONCAT_WS(' ', q.first_name, q.last_name) LIKE ? ESCAPE '\\\\' THEN CONCAT_WS(' ', q.first_name, q.last_name)
+                        WHEN q.email_id LIKE ? ESCAPE '\\\\' THEN q.email_id
+                        ELSE q.phone_number
+                    END AS matched_value,
+                    CONCAT_WS(' · ', COALESCE(q.reference_number, CONCAT('Quote #', q.id)), CONCAT_WS(' ', q.first_name, q.last_name), q.email_id, q.product_name, q.status) AS description
+                FROM get_enquire_quote q
+                WHERE q.reference_number LIKE ? ESCAPE '\\\\'
+                   OR CAST(q.id AS CHAR) LIKE ? ESCAPE '\\\\'
+                   OR q.product_name LIKE ? ESCAPE '\\\\'
+                   OR CONCAT_WS(' ', q.first_name, q.last_name) LIKE ? ESCAPE '\\\\'
+                   OR q.email_id LIKE ? ESCAPE '\\\\'
+                   OR q.phone_number LIKE ? ESCAPE '\\\\'
+                   OR q.country LIKE ? ESCAPE '\\\\'
+                   OR q.items_json LIKE ? ESCAPE '\\\\'
+                ORDER BY q.id DESC
+            `, [like, like, like, like, like, like, like, like, like, like, like, like, like], perTypeLimit),
+
+            runGlobalSearchQuery(`
+                SELECT
+                    'Contact Enquiry' AS result_type,
+                    c.id AS record_id,
+                    c.id AS highlight_id,
+                    '/contact-enquiries' AS path,
+                    'Contact Enquiries' AS page,
+                    CASE
+                        WHEN c.reference_number LIKE ? ESCAPE '\\\\' THEN c.reference_number
+                        WHEN CAST(c.id AS CHAR) LIKE ? ESCAPE '\\\\' THEN CAST(c.id AS CHAR)
+                        WHEN CONCAT_WS(' ', c.first_name, c.last_name) LIKE ? ESCAPE '\\\\' THEN CONCAT_WS(' ', c.first_name, c.last_name)
+                        WHEN c.email_id LIKE ? ESCAPE '\\\\' THEN c.email_id
+                        WHEN c.phone_number LIKE ? ESCAPE '\\\\' THEN c.phone_number
+                        ELSE c.subject
+                    END AS matched_value,
+                    CONCAT_WS(' · ', COALESCE(c.reference_number, CONCAT('Contact #', c.id)), CONCAT_WS(' ', c.first_name, c.last_name), c.email_id, c.subject, c.status) AS description
+                FROM contact_us_enquiry c
+                WHERE c.reference_number LIKE ? ESCAPE '\\\\'
+                   OR CAST(c.id AS CHAR) LIKE ? ESCAPE '\\\\'
+                   OR CONCAT_WS(' ', c.first_name, c.last_name) LIKE ? ESCAPE '\\\\'
+                   OR c.email_id LIKE ? ESCAPE '\\\\'
+                   OR c.phone_number LIKE ? ESCAPE '\\\\'
+                   OR c.country LIKE ? ESCAPE '\\\\'
+                   OR c.subject LIKE ? ESCAPE '\\\\'
+                ORDER BY c.id DESC
+            `, [like, like, like, like, like, like, like, like, like, like, like, like], perTypeLimit),
+
+            runGlobalSearchQuery(`
+                SELECT
+                    'General Enquiry' AS result_type,
+                    e.id AS record_id,
+                    e.id AS highlight_id,
+                    '/general-enquiries' AS path,
+                    'General Enquiries' AS page,
+                    CASE
+                        WHEN e.reference_number LIKE ? ESCAPE '\\\\' THEN e.reference_number
+                        WHEN CAST(e.id AS CHAR) LIKE ? ESCAPE '\\\\' THEN CAST(e.id AS CHAR)
+                        WHEN CONCAT_WS(' ', e.first_name, e.last_name) LIKE ? ESCAPE '\\\\' THEN CONCAT_WS(' ', e.first_name, e.last_name)
+                        WHEN e.email_id LIKE ? ESCAPE '\\\\' THEN e.email_id
+                        WHEN e.phone_number LIKE ? ESCAPE '\\\\' THEN e.phone_number
+                        ELSE e.product_category
+                    END AS matched_value,
+                    CONCAT_WS(' · ', COALESCE(e.reference_number, CONCAT('Enquiry #', e.id)), CONCAT_WS(' ', e.first_name, e.last_name), e.email_id, e.product_category, e.status) AS description
+                FROM enquiries e
+                WHERE e.reference_number LIKE ? ESCAPE '\\\\'
+                   OR CAST(e.id AS CHAR) LIKE ? ESCAPE '\\\\'
+                   OR CONCAT_WS(' ', e.first_name, e.last_name) LIKE ? ESCAPE '\\\\'
+                   OR e.email_id LIKE ? ESCAPE '\\\\'
+                   OR e.phone_number LIKE ? ESCAPE '\\\\'
+                   OR e.country LIKE ? ESCAPE '\\\\'
+                   OR e.product_category LIKE ? ESCAPE '\\\\'
+                ORDER BY e.id DESC
+            `, [like, like, like, like, like, like, like, like, like, like, like, like], perTypeLimit),
+
+            runGlobalSearchQuery(`
+                SELECT
+                    'Sample Enquiry' AS result_type,
+                    se.enquiry_id AS record_id,
+                    se.enquiry_id AS highlight_id,
+                    '/sample-enquiries' AS path,
+                    'Sample Enquiries' AS page,
+                    CASE
+                        WHEN CAST(se.enquiry_id AS CHAR) LIKE ? ESCAPE '\\\\' THEN CAST(se.enquiry_id AS CHAR)
+                        WHEN CAST(se.customer_id AS CHAR) LIKE ? ESCAPE '\\\\' THEN CAST(se.customer_id AS CHAR)
+                        WHEN cm.customer_name LIKE ? ESCAPE '\\\\' THEN cm.customer_name
+                        WHEN cm.email_id LIKE ? ESCAPE '\\\\' THEN cm.email_id
+                        WHEN cm.phone_number LIKE ? ESCAPE '\\\\' THEN cm.phone_number
+                        ELSE se.product_name
+                    END AS matched_value,
+                    CONCAT_WS(' · ', CONCAT('Sample #', se.enquiry_id), CONCAT('Customer #', se.customer_id), cm.customer_name, cm.email_id, se.product_name, se.status) AS description
+                FROM sample_enquiry se
+                LEFT JOIN customer_master cm ON cm.id = se.customer_id
+                WHERE CAST(se.enquiry_id AS CHAR) LIKE ? ESCAPE '\\\\'
+                   OR CAST(se.customer_id AS CHAR) LIKE ? ESCAPE '\\\\'
+                   OR cm.customer_name LIKE ? ESCAPE '\\\\'
+                   OR cm.email_id LIKE ? ESCAPE '\\\\'
+                   OR cm.phone_number LIKE ? ESCAPE '\\\\'
+                   OR se.product_name LIKE ? ESCAPE '\\\\'
+                ORDER BY se.enquiry_id DESC
+            `, [like, like, like, like, like, like, like, like, like, like, like], perTypeLimit),
+        ];
+
+        const grouped = await Promise.all(searches);
+        const seenRecords = new Set();
+        const rows = grouped.flat().filter(row => {
+            const key = `${row.result_type}:${row.record_id}`;
+            if (seenRecords.has(key)) return false;
+            seenRecords.add(key);
+            return true;
+        });
+        const data = rows.slice(0, 40).map(normaliseSearchRow);
+        return res.json({ status: 1, data });
+    } catch (err) {
+        return res.json({ status: 0, message: "DB error" });
+    }
+};
+
 // Validates and normalises the `dates` array shared by create/update:
 // skips genuinely empty rows (never submitted), rejects a bad date value or
 // a title reused twice within the same order. Returns either

@@ -155,6 +155,7 @@ router.get('/recent-activity', auth, itemController.getRecentActivity);
 
 
 // ── Dashboard (real stats, monthly graph, latest-enquiry previews) ──────
+router.get('/global-search',               auth, itemController.globalSearch);
 router.get('/dashboard-stats',             auth, itemController.getDashboardStats);
 router.get('/dashboard-monthly-enquiries', auth, itemController.getMonthlyEnquiries);
 router.get('/dashboard-latest-enquiries',  auth, itemController.getLatestEnquiries);
